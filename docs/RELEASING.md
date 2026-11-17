@@ -2,20 +2,11 @@
 
 Every step of a release, in order. The names used here come from `brand.js`; if the name there changes, the file names follow.
 
-## Why the installer has two names
-
-An installed copy only accepts an update whose file is named the way that copy expects.
-
-| Installed copy | Accepts |
-| --- | --- |
-| Print Gallery, up to 2.0.2 | `Print-Gallery-Setup-<version>.exe` only |
-| PrintBinder, 2.1.0 and later | `PrintBinder-Setup-<version>.exe` and `Print-Gallery-Setup-<version>.exe` |
-
-So every release carries the **same installer under both names**. An old Print Gallery install fetches the old-named copy and becomes PrintBinder in one step, with no clicks beyond "Update and restart". Keep shipping both names for as long as Print Gallery installs should be able to update. Dropping the old name strands them.
+A release has one installer, `PrintBinder-Setup-<version>.exe`. Installs older than 2.1.0 were private copies and no longer exist, so nothing is published under an earlier name. Releases are published in the GitHub project named by `updateRepo` in `brand.js` and, for a library shared between computers, the installer is copied with `latest.json` into the library's `updates` folder.
 
 ## 1. Before building
 
-1. Set `"version"` in `package.json`.
+1. Set `"version"` in `package.json` (and in both places at the top of `package-lock.json`).
 2. In `public/index.html`, find `WHATSNEW` and make sure the top entry has this version's number and notes.
 3. Run the tests.
 4. If the name, the maker line or the icon changed: `npm run art`.
@@ -26,15 +17,14 @@ So every release carries the **same installer under both names**. An old Print G
 npm run dist
 ```
 
-This writes the notices, builds the installer, and then puts in `dist\`:
+This writes the notices, builds the installer, and then leaves in `dist\`:
 
 | File | What it is |
 | --- | --- |
 | `PrintBinder-Setup-<version>.exe` | The installer |
-| `Print-Gallery-Setup-<version>.exe` | The same file, under the name old installs accept |
-| `latest.json` | `{"version": "<version>", "file": "Print-Gallery-Setup-<version>.exe"}` |
+| `latest.json` | `{"version": "<version>", "file": "PrintBinder-Setup-<version>.exe"}` |
 
-The last lines printed say whether the two installers are the same file, with their size and checksum. If the copy step did not run, do it by hand: `node scripts/release-files.js`.
+The last lines printed give the installer's name, size and checksum, and what `latest.json` names. If that last step did not run, do it by hand: `node scripts/release-files.js`. A copy of this version's installer under an earlier name, left in `dist\` by an older build, is removed by that step. Installers of other versions are listed and left alone; do not attach them.
 
 The installer is not code-signed. Windows shows an "unknown publisher" warning when someone runs it for the first time (README, Installing).
 
@@ -46,42 +36,38 @@ Build the test variant (`npm run dist:test`, optionally with `PG_TEST_VERSION` s
 
 In the project named by `updateRepo` in `brand.js` (at present `JRIIDesigns/printbinder`):
 
-1. Create a release with the tag `v<version>` (for example `v2.1.0`). The tag is how the program reads the version.
+1. Create a release with the tag `v<version>` (for example `v2.1.5`). The tag is how the program reads the version.
 2. Put the release notes in the description. The program shows the first 900 characters in "Version x is available".
-3. Attach **both** installers: `PrintBinder-Setup-<version>.exe` and `Print-Gallery-Setup-<version>.exe`.
+3. Attach the installer, `PrintBinder-Setup-<version>.exe`, and nothing else.
 4. Publish it as the latest release (not a draft, not a pre-release): the program asks for "latest".
 
 With the command-line program:
 
 ```
-gh release create v<version> --repo <updateRepo> --title "PrintBinder <version>" --notes-file notes.md "dist/PrintBinder-Setup-<version>.exe" "dist/Print-Gallery-Setup-<version>.exe"
+gh release create v<version> --repo <updateRepo> --title "PrintBinder <version>" --notes-file notes.md "dist/PrintBinder-Setup-<version>.exe"
 ```
-
-While that project is private, an install can only read it through the GitHub command-line program signed in on that computer. Everyone else updates through the library folder (step 5).
 
 ## 5. The library's `updates` folder
 
-A library shared between computers carries the installer with it, so the other computers can update without signing in anywhere. Into the `updates` folder of the program's own folder inside the library, copy:
+A library shared between computers carries the installer with it, so the other computers can update even when they cannot reach the releases. Into the `updates` folder of the program's own folder inside the library, copy from `dist\`:
 
-- `Print-Gallery-Setup-<version>.exe`
+- `PrintBinder-Setup-<version>.exe`
 - `latest.json`
 
 Which folder that is depends on the library:
 
 | Library | Folder |
 | --- | --- |
-| First used with Print Gallery | `<home folder>\Print Gallery\updates` |
 | First used with PrintBinder | `<home folder>\PrintBinder\updates` |
+| First used under the earlier name, Print Gallery | `<home folder>\Print Gallery\updates` |
 
-`latest.json` must name the old-style file (`Print-Gallery-Setup-…`) while Print Gallery installs still share the library: they ignore any other name. PrintBinder accepts it too. Remove the previous version's installer from the folder once the new one is in.
+Remove the previous version's installer from the folder once the new one is in.
 
 ## 6. After publishing
 
 1. On an installed copy, choose Help > Check for updates. It should offer the new version, install it, reopen, and say "Updated to version …".
 2. Commit, and tag the commit `v<version>`.
 
-## Installs that still ask the earlier project
+## If the releases ever move
 
-Versions up to 2.1.0 look for updates in an earlier, private project and in the library's `updates` folder. Until every such install has updated to a version that asks `JRIIDesigns/printbinder`, publish each release in the earlier project as well, with both file names, and keep the `updates` folder current (step 5).
-
-If the releases ever move again: change `updateRepo` in `brand.js` (it is the only place) and keep publishing in the old project for as long as older installs should be able to update.
+Change `updateRepo` in `brand.js` (it is the only place), and keep publishing in the old project for as long as installs that ask it should be able to update.

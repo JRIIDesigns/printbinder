@@ -3,12 +3,12 @@
 // Three places are tried, in order:
 //   1. the project's GitHub releases, read openly (works once the project is public);
 //   2. the same releases through the GitHub command-line program, if it is installed and signed in on this computer
-//      (needed while the project is private — its sign-in stays with that program, the app never sees it);
+//      (only needed if the project is private — its sign-in stays with that program, the app never sees it);
 //   3. <home library>/<data folder>/updates/latest.json, which travels with the library to every computer that shares it.
-// What an installer file is called (PrintBinder-Setup-1.2.3.exe) comes from the name in brand.js. A file named after one of
-// the program's former names (Print-Gallery-Setup-1.2.3.exe) is accepted too: a release carries the same installer under both
-// names, for the installs that only know the old one (docs/RELEASING.md). Where a release has both, the one under today's name
-// is taken. A file named otherwise is never fetched or started.
+// What an installer file is called (PrintBinder-Setup-1.2.3.exe) comes from the name in brand.js, and a release carries that one
+// file (docs/RELEASING.md). A file named after one of the program's former names (Print-Gallery-Setup-1.2.3.exe) is still
+// accepted if one is offered, as early releases after the rename did; where a release has both, the one under today's name is
+// taken. A file named otherwise is never fetched or started.
 const fs = require('fs'), path = require('path'), { execFile, spawn } = require('child_process'), { once } = require('events');
 const brand = require('./brand.js');
 

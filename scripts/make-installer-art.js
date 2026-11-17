@@ -3,7 +3,9 @@
 //   icon.png                       512 x 512   the program's icon (window, taskbar, drag picture)
 //   icon.ico                       16, 24, 32, 48, 64, 128 and 256 px in one file (the exe, shortcuts, the installer)
 //   public/logo.png                200 x 200   the mark in the page's header
-//   build/installerSidebar.bmp     164 x 314   the tall panel on the Welcome and Finish pages, with the maker's logo
+//   build/installerSidebar.bmp     164 x 314   the tall panel on the Welcome and Finish pages: the icon, the name, a line about
+//                                              the program, then a small "by" just above the maker's logo. The logo spells the
+//                                              maker's name itself, so the name is not written again under it
 //   build/uninstallerSidebar.bmp   164 x 314   the same panel, quieter, for the uninstaller
 //   build/installerHeader.bmp      150 x 57    the small picture at the top right of the other pages
 // THE MARK is the maker's "II" — the Roman numeral of JRII Designs — drawn as two ring binders standing side by side, seen
@@ -17,7 +19,8 @@
 //   'full'   128 px and up the lettered mark as designed
 // public/jrii.png, the maker's own logo, is NOT made here: it is kept as it is and placed on the installer's side panel.
 // Run with:  npm run art -- [folder for PNG copies to look at]      (npx electron scripts/make-installer-art.js [folder])
-// Run it again after changing the name or the maker line in brand.js (both are written on the panel). Nothing is downloaded:
+// Run it again after changing the name or the maker line in brand.js (the name is written on the panel; of the maker line only
+// its first word, "by", is, above the logo — the whole line is written only if public/jrii.png is missing). Nothing is downloaded:
 // the pictures are drawn in a hidden Electron window and saved from there.
 const { app, BrowserWindow } = require('electron');
 const fs = require('fs'), path = require('path'), os = require('os');
@@ -82,13 +85,15 @@ const page = (w, h, body, css) => `<!doctype html><html><head><meta charset="utf
   html,body{margin:0;width:${w}px;height:${h}px;overflow:hidden} body{position:relative;font-family:"Segoe UI Variable Display","Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
   ${css}</style></head><body>${body}</body></html>`;
 
+// the small word above the maker's logo: the first word of the maker line when that line is "by <maker>", otherwise nothing
+const by = (/^\s*(by)\s+\S/i.exec(brand.maker || '') || [])[1] || '';
 const sidebar = (icon, jrii, quiet) => page(164, 314, `
   <div class="glow"></div><div class="grid"></div>
   <img class="mark" src="${icon}">
   <div class="name">${esc(brand.name)}</div>
   <div class="rule"></div>
   <div class="tag">${esc(quiet ? 'Your library stays as it is' : 'Your 3D print library, in order')}</div>
-  <div class="maker">${jrii ? `<img src="${jrii}">` : ''}<span>${esc(brand.maker || '')}</span></div>
+  <div class="maker">${jrii ? `${by ? `<span class="by">${esc(by)}</span>` : ''}<img src="${jrii}">` : `<span>${esc(brand.maker || '')}</span>`}</div>
   <div class="bar"></div>`, `
   body{background:linear-gradient(168deg,${NAVY2} 0%,${NAVY} 58%,#070f17 100%)}
   .glow{position:absolute;left:-40px;top:-40px;width:244px;height:230px;background:radial-gradient(closest-side,rgba(95,189,240,${quiet ? '.10' : '.22'}),rgba(95,189,240,0))}
@@ -98,7 +103,8 @@ const sidebar = (icon, jrii, quiet) => page(164, 314, `
   .rule{position:absolute;left:62px;top:168px;width:40px;height:3px;border-radius:2px;background:${quiet ? '#5a6877' : GREEN}}
   .tag{position:absolute;left:10px;right:10px;top:180px;text-align:center;color:#a9bccb;font-size:11px;line-height:1.35}
   .maker{position:absolute;left:0;right:0;bottom:16px;text-align:center;color:#cfdbe5;font-size:10.5px;letter-spacing:.3px}
-  .maker img{display:block;margin:0 auto 5px;height:50px;width:auto;filter:drop-shadow(0 2px 5px rgba(0,0,0,.5))${quiet ? ' saturate(.7)' : ''}}
+  .maker .by{display:block;margin:0 auto 4px;font-size:10px;letter-spacing:.6px;color:#a9bccb}
+  .maker img{display:block;margin:0 auto;height:50px;width:auto;filter:drop-shadow(0 2px 5px rgba(0,0,0,.5))${quiet ? ' saturate(.7)' : ''}}
   .bar{position:absolute;left:0;right:0;bottom:0;height:5px;background:linear-gradient(90deg,${quiet ? '#5a6877,#3a4a59' : GREEN + ',' + BLUE})}`);
 
 const header = icon => page(150, 57, `<div class="panel"></div><div class="edge"></div><img src="${icon}">`, `

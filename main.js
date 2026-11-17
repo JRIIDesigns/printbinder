@@ -7,6 +7,7 @@ const path = require('path');
 const fs = require('fs');
 // The program's name, publisher and addresses all come from brand.js — nothing below spells the name out.
 const brand = require('./brand.js');
+const folders = require('./folders.js');   // is a chosen folder too broad (a whole drive, a whole user folder, Documents …)?
 const NAME = brand.name;
 app.setName(NAME);   // the settings folder is %APPDATA%\<name>, whether installed or run from source — except:
 // THE SETTINGS FOLDER OF AN INSTALL MADE UNDER AN EARLIER NAME IS KEPT, IN PLACE. If %APPDATA%\<a former name> is there, it
@@ -44,6 +45,25 @@ function protectedFolders() {
   if (process.env.PORTABLE_EXECUTABLE_DIR) add(process.env.PORTABLE_EXECUTABLE_DIR);
   return [...out];
 }
+// Which of those folders is which, for folders.js: a whole user folder, AppData, Program Files, Windows and the program's own
+// folders cannot be chosen as the home folder or as a location; Documents, Desktop, Downloads and the like can, after a question.
+// Asked of Windows itself, like the list above, so a Documents folder that has been moved elsewhere is still known for what it is.
+// Handed to the server in GALLERY_FOLDER_KINDS. A test may hand over its own in GALLERY_FOLDER_KINDS_TEST (a JSON object).
+function folderKinds() {
+  if (process.env.GALLERY_FOLDER_KINDS_TEST) { try { const j = JSON.parse(process.env.GALLERY_FOLDER_KINDS_TEST); if (j && typeof j === 'object' && !Array.isArray(j)) return j; } catch {} }
+  const get = n => { try { return app.getPath(n); } catch { return ''; } };
+  const kinds = folders.hintsFromEnv(process.env, get('home'));
+  const put = (p, kind) => { if (typeof p === 'string' && p.trim() && path.isAbsolute(p.trim())) kinds[path.resolve(p.trim())] = kind; };
+  for (const n of ['desktop', 'documents', 'music', 'pictures', 'videos']) put(get(n), 'media');
+  put(get('downloads'), 'downloads');
+  put(get('appData'), 'appdata');
+  put(get('userData'), 'own');
+  if (!process.env.PORTABLE_EXECUTABLE_DIR) put(path.dirname(get('exe')), 'own');
+  else put(process.env.PORTABLE_EXECUTABLE_DIR, 'ok');   // a portable copy may sit anywhere, in a library even: its folder is on the list above, but is not refused as a choice
+  return kinds;
+}
+let rulesMemo = null;
+const folderRules = () => rulesMemo || (rulesMemo = folders.build(protectedFolders(), folderKinds()));
 const readCfg = () => { try { return JSON.parse(fs.readFileSync(cfgFile(), 'utf8')); } catch { return {}; } };
 const writeCfg = c => { fs.mkdirSync(path.dirname(cfgFile()), { recursive: true }); fs.writeFileSync(cfgFile(), JSON.stringify(c, null, 2)); };
 
@@ -89,12 +109,25 @@ async function firstRun() {
     return dir;
   }
 }
+// The folder chooser, and what is said about the folder that comes back (folders.js decides and words it; only the two windows
+// are opened here). A whole drive, a whole user folder, AppData, Program Files or Windows is refused and the chooser opens again;
+// Documents, Desktop, Downloads and the like, or a cloud drive's top folder, are asked about first, and the ready answer is
+// "Choose a different folder". A refused folder that already holds a library may still be kept, after the same kind of question.
 async function chooseRoot() {
-  const r = await dialog.showOpenDialog({ title: 'Choose your home folder — where your 3D print files live', properties: ['openDirectory', 'createDirectory'] });
-  return r.canceled ? null : r.filePaths[0];
+  const over = () => win && !win.isDestroyed() ? win : null;   // the window the two boxes belong to, when there is one (there is none at first start)
+  const box = o => over() ? dialog.showMessageBox(over(), o) : dialog.showMessageBox(o);
+  return folders.choose({
+    use: 'home', rules: folderRules(), app: NAME, usedBefore: hasGallery,
+    pick: async () => { const o = { title: 'Choose your home folder — where your 3D print files live', properties: ['openDirectory', 'createDirectory'] }; const r = await (over() ? dialog.showOpenDialog(over(), o) : dialog.showOpenDialog(o)); return r.canceled ? null : r.filePaths[0]; },
+    ask: async b => (await box({ type: b.type, title: b.title, message: b.message, detail: b.detail, buttons: b.buttons, defaultId: b.defaultId, cancelId: b.cancelId, noLink: true })).response,
+  });
 }
+let choosing = false;
 async function changeRoot() {
-  const dir = await chooseRoot();
+  if (choosing) return;   // one chooser at a time (the menu, and the button on the "home folder is a whole drive" notice)
+  choosing = true;
+  let dir = null;
+  try { dir = await chooseRoot(); } finally { choosing = false; }
   if (!dir) return;
   writeCfg({ ...readCfg(), root: dir });
   app.relaunch(); app.exit(0);
@@ -373,6 +406,7 @@ else {
     process.env.GALLERY_LOCFILE = path.join(app.getPath('userData'), 'locations.json');   // other locations are per computer
     process.env.GALLERY_PHONEFILE = path.join(app.getPath('userData'), 'phone.json');   // phone access: the switch and the paired devices, per computer
     process.env.GALLERY_SLICERFILE = path.join(app.getPath('userData'), 'slicers.json');   // which slicers are installed where: per computer
+    process.env.GALLERY_FOLDER_KINDS = JSON.stringify(folderKinds());   // which of them is which: what may not be chosen as a location, and what is asked about first (folders.js)
     process.env.GALLERY_PROTECTED = JSON.stringify(protectedFolders());   // folders Windows and other programs depend on: never renamed, moved or removed (server.js, keptWhy)
     // The page is served on this PC only, on a port of its own. The port is chosen freely the first time and then KEPT (in
     // config.json): what the page remembers for this device — the view, and that the welcome and the news have been seen — is
@@ -392,6 +426,7 @@ else {
     srv.log(NAME + ' ' + app.getVersion() + ' | settings folder: ' + app.getPath('userData') + (settingsKept ? ' (kept from an earlier name)' : '') + ' | program folder in the library: ' + srv.APPDIR);
     srv.hooks.openPath = p => shell.openPath(p);
     srv.hooks.reveal = p => shell.showItemInFolder(p);
+    srv.hooks.chooseHome = () => { changeRoot().catch(e => srv.log('choose home', e && e.message)); };   // the button on the notice about a home folder that is too broad
     srv.hooks.pickFolder = async () => { const r = await dialog.showOpenDialog(win, { title: 'Choose a folder to show in the gallery', properties: ['openDirectory'] }); return r.canceled ? null : r.filePaths[0]; };
     srv.hooks.pickExe = async () => { const r = await dialog.showOpenDialog(win, { title: 'Choose your slicer’s program file', defaultPath: process.env.ProgramFiles, properties: ['openFile'], filters: [{ name: 'Programs', extensions: ['exe'] }] }); return r.canceled ? null : r.filePaths[0]; };
     // Start-menu shortcuts: how slicers installed in unusual places are found

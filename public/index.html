@@ -78,7 +78,7 @@ select,.btn{border:1px solid var(--line);background:var(--panel);border-radius:8
 .node .tw{width:20px;height:26px;border:0;background:none;color:var(--dim);padding:0;flex:none;font-size:10px}
 .node .lb{flex:1;min-width:0;padding:4px 4px 4px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
 .node .ct{color:var(--dim);font-size:12px;padding-right:8px;font-variant-numeric:tabular-nums}
-.node.zero .lb{color:var(--dim)}
+.node.zero .lb{color:var(--dim)} .ct .ctoff{font-style:normal;white-space:nowrap;opacity:.8} .emptybtns{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:14px}
 .lock{display:inline-flex;align-items:center;flex:none;margin:0 4px;opacity:.6;cursor:help;vertical-align:middle} .lock svg,.tile .lock svg{width:11px;height:11px;fill:currentColor;stroke:none}
 .sec .fnk{color:var(--text);font-weight:650}
 #main{flex:1;overflow:auto;padding:4px 18px 90px;min-width:0}
@@ -173,7 +173,7 @@ dialog::backdrop{background:rgba(10,12,16,.6)}
 .x{z-index:3;position:absolute;right:10px;top:8px;border:0;background:none;font-size:22px;color:var(--dim);line-height:1}
 .box{padding:18px 20px;width:min(460px,92vw)}
 .box h3{margin:0 0 4px;font-size:16px}
-.box p{margin:0 0 12px;color:var(--dim);word-break:break-word}
+.box p{margin:0 0 12px;color:var(--dim);word-break:break-word} #askP{white-space:pre-line}
 .box input{width:100%}
 .box .btns{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
 #pick .box{width:min(560px,92vw)}
@@ -559,10 +559,13 @@ const fmtDate = m => new Date(m).toLocaleDateString(undefined, { year: 'numeric'
 const fileURL = p => '/file?p=' + encodeURIComponent(p);
 const baseOf = p => p.slice(p.lastIndexOf('/') + 1);
 const dirOf = p => { const i = p.lastIndexOf('/'); return i < 0 ? '' : p.slice(0, i); };
-const nameOfDir = d => d ? '“' + baseOf(d) + '”' : 'the top folder';
 const VIDEO = new Set(['mp4', 'mov', 'webm', 'm4v']);
 // a path in another location is stored as ":Name/sub/file"; people see it as "↗ Name/sub/file"
 const nice = p => p && p[0] === ':' ? '↗ ' + p.slice(1) : p;
+// The name of a file or folder as it is SHOWN. A location's own folder is ":Name" inside the program; in anything people read
+// (messages, questions, titles) it is "↗ Name", never with the colon. Use these two wherever a name goes into words.
+const nameOf = p => nice(baseOf(p));
+const nameOfDir = d => d ? '“' + nameOf(d) + '”' : 'the top folder';
 const absPath = p => {
   const win = x => x.replace(/\//g, '\\');
   if (p[0] !== ':') return S.root + '\\' + win(p);
@@ -595,7 +598,7 @@ const isLocTop = d => typeof d === 'string' && d[0] === ':' && !d.includes('/');
 const kept = d => typeof d === 'string' && !!d && (isLocTop(d) || KEPT.has(d.toLowerCase()));
 const KEPT_WHY = 'Windows and your other programs use this folder, so its name and place are left alone. The files inside it can still be moved.';
 const LOC_WHY = 'This is the folder itself, as it is named on your computer. Its name and place are left alone. The files inside it can still be moved.';
-const keptSay = d => toast(isLocTop(d) ? `“${d.slice(1)}” is one of the places ${APP()} shows, so ${APP()} leaves its name and place alone. The files inside it can still be moved.` : `“${baseOf(d)}” is a folder Windows and your other programs use, so ${APP()} leaves its name and place alone. The files inside it can still be moved.`);
+const keptSay = d => toast(isLocTop(d) ? `“${d.slice(1)}” is one of the places ${APP()} shows, so ${APP()} leaves its name and place alone. The files inside it can still be moved.` : `“${nameOf(d)}” is a folder Windows and your other programs use, so ${APP()} leaves its name and place alone. The files inside it can still be moved.`);
 const freeOnly = items => { const k = items.filter(kept); if (k.length) keptSay(k[0]); return k.length ? items.filter(i => !kept(i)) : items; };   // what may be cut, moved or removed; says why when something was left out
 const LOCK = '<span class="lock" title="' + KEPT_WHY + '" aria-label="Its name and place are left alone"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 7V5a3.5 3.5 0 0 1 7 0v2H13v7H3V7zm2 0h3V5a1.5 1.5 0 0 0-3 0z"/></svg></span>';
 
@@ -603,7 +606,7 @@ async function api(url, body) {
   const r = await fetch(url, body ? { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Gallery': '1' }, body: JSON.stringify(body) } : {});
   const j = await r.json().catch(() => ({ error: 'The gallery did not answer properly.' }));
   if (r.status === 401 && REMOTE) { location.replace('/'); throw new Error('This device is no longer paired.'); }
-  if (!r.ok) throw new Error(j.error || 'Request failed');
+  if (!r.ok) throw Object.assign(new Error(j.error || 'Request failed'), { data: j });   // data: what else the answer held (a question to ask before a broad folder is added)
   if (body && /^\/api\/(fs\/(move|copy|import|remove|rename|mkdir)|review\/apply|zip\/extract)/.test(url)) PG.undone.length = 0;   // something new was done: there is nothing left to redo
   return j;
 }
@@ -681,7 +684,7 @@ function pickFolder(title, exclude = [], later = false) {
       for (let p = dirOf(sel); p; p = dirOf(p)) open.add(p);   // the selected folder is always in view
       kids = new Map();
       for (const x of all) { const p = dirOf(x); (kids.get(p) || kids.set(p, []).get(p)).push(x); }
-      const row = (x, depth, label) => `<div class="prow" role="treeitem" data-d="${esc(x)}" title="${esc(nice(x) || 'The top of your library')}" style="padding-left:${depth * 16}px"><span class="tw"${kids.has(x) && x ? ' data-tw' : ''}>${kids.has(x) && x ? (open.has(x) ? '▾' : '▸') : ''}</span><span class="lb">${label || esc(baseOf(x))}${made.includes(x) && !S.dirs.includes(x) ? ' <small>(new)</small>' : ''}</span></div>`;
+      const row = (x, depth, label) => `<div class="prow" role="treeitem" data-d="${esc(x)}" title="${esc(nice(x) || 'The top of your library')}" style="padding-left:${depth * 16}px"><span class="tw"${kids.has(x) && x ? ' data-tw' : ''}>${kids.has(x) && x ? (open.has(x) ? '▾' : '▸') : ''}</span><span class="lb">${label || esc(nameOf(x))}${made.includes(x) && !S.dirs.includes(x) ? ' <small>(new)</small>' : ''}</span></div>`;
       const out = [row('', 0, '<b>Top folder</b>')];
       const walk = (par, depth) => { for (const x of (kids.get(par) || []).filter(x => par !== '' || x[0] !== ':').sort(cmp)) { out.push(row(x, depth)); if (kids.has(x) && open.has(x)) walk(x, depth + 1); } };
       walk('', 1);
@@ -891,7 +894,7 @@ function render() {
     S.tiles = S.dirs.filter(d => dirOf(d) === S.folder).sort((a, b) => (a[0] === ':') - (b[0] === ':') || cmp(a, b));
     if (S.tiles.length) html.push('<div class="tiles">' + S.tiles.map(d => {
       const n = COUNTS.get(d) || 0, loc = d[0] === ':' && !d.includes('/');
-      return `<div class="tile${loc ? ' loc' : ''}${kept(d) && !loc ? ' kept' : ''}${cutCls(d)}" tabindex="0" draggable="${DRAG && !kept(d)}" data-d="${esc(d)}" data-drop="${esc(d)}" title="${esc(nice(d))} — double-click to open">${FOLDER_SVG}<div class="tb"><div class="tn">${esc(nice(baseOf(d)))}</div><div class="tc">${kept(d) && !loc ? LOCK : ''}${n ? n.toLocaleString() + (n === 1 ? ' file' : ' files') : 'nothing to show'}</div></div><button class="more" data-more aria-label="Folder actions" title="Folder actions">⋯</button></div>`;
+      return `<div class="tile${loc ? ' loc' : ''}${kept(d) && !loc ? ' kept' : ''}${cutCls(d)}" tabindex="0" draggable="${DRAG && !kept(d)}" data-d="${esc(d)}" data-drop="${esc(d)}" title="${esc(nice(d))} — double-click to open">${FOLDER_SVG}<div class="tb"><div class="tn">${esc(nice(baseOf(d)))}</div><div class="tc">${kept(d) && !loc ? LOCK : ''}${n ? n.toLocaleString() + (n === 1 ? ' file' : ' files') : offN(d) ? '0 of ' + offN(d).toLocaleString() + (offN(d) === 1 ? ' file' : ' files') + ' shown' : S.q || S.pick ? 'nothing to show' : 'empty'}</div></div><button class="more" data-more aria-label="Folder actions" title="Folder actions">⋯</button></div>`;
     }).join('') + '</div>');
   }
   if (det || tiles) {   // one list: the Details columns say which folder a file is in, and a folder of tiles lists only its own files
@@ -909,10 +912,10 @@ function render() {
     for (const d of order) {
       const g = groups.get(d), parts = nice(d).split('/');
       const title = d === '' ? 'Top folder <span>— loose files</span>' : (parts.length > 1 ? `<span>${esc(parts.slice(0, -1).join(' / '))} / </span>` : '') + (kept(d) ? `<span class="fnk" title="${isLocTop(d) ? LOC_WHY : KEPT_WHY}">${esc(parts[parts.length - 1])}</span>${isLocTop(d) ? '' : LOCK}` : `<span class="fn" title="Click to rename">${esc(parts[parts.length - 1])}</span>`);
-      queue(`<section><div class="sec" data-drop="${esc(d)}"><h2 title="${esc(d)}">${title}</h2><small>${g.length}</small><button class="link pc" data-reveal="${esc(d)}">Open in Explorer</button><button class="more" data-more aria-label="Folder actions" title="Folder actions">⋯</button></div><div class="grid"></div></section>`, g);
+      queue(`<section><div class="sec" data-drop="${esc(d)}"><h2 title="${esc(nice(d))}">${title}</h2><small>${g.length}</small><button class="link pc" data-reveal="${esc(d)}">Open in Explorer</button><button class="more" data-more aria-label="Folder actions" title="Folder actions">⋯</button></div><div class="grid"></div></section>`, g);
     }
   }
-  const emptyFolder = S.folder && !S.q ? `<div class="empty"><b>Nothing to show in ${esc(nameOfDir(S.folder))}</b>Drag files or folders onto it in the list on the left, or switch on more file types above.</div>` : '';
+  const emptyFolder = S.folder && !S.q ? emptyFolderHTML() : '';
   main.className = 'sz-' + S.size + (det && sortDef().col ? ' dx' : '');
   main.innerHTML = html.join('') || (groupsToDraw.length ? '' : emptyFolder || (!S.files.length && !S.q && !S.pick && S.scannedAt ? emptyLibraryHTML() : `<div class="empty"><b>Nothing matches</b>Try a different search, pick another folder, or switch on more file types above.</div>`));
   // only the first screenfuls are drawn now; the rest follow as the window is scrolled towards them (drawFill)
@@ -924,6 +927,14 @@ function render() {
   if (refocus) { const el = curEl(); if (el) el.focus({ preventScroll: true }); }
 }
 
+// The three kinds a file can be, as the buttons at the top name them.
+const KIND_NAME = { m: 'Models', i: 'Pictures & video', o: 'Other files' };
+const kindShown = f => S.kinds.has(f.k) || (f.zm > 0 && S.kinds.has('m'));
+// How many files a folder holds counting every kind, for a folder that shows none because their kinds are switched off: it is not
+// empty, and must not be called that. Only worked out while browsing (not during a search or a picked set, where 0 means no match).
+let ALLC = null;
+const offN = d => ALLC && !COUNTS.get(d) ? ALLC.get(d) || 0 : 0;
+const offCount = d => { const a = offN(d); return a ? `<i class="ctoff" title="${a.toLocaleString()} file${a === 1 ? '' : 's'} here, none of the kinds switched on above (Models, Pictures &amp; video, Other files)">0 of ${a.toLocaleString()}</i>` : ''; };
 function renderTree() {
   const counts = COUNTS = new Map();
   for (const f of pool) {
@@ -931,13 +942,18 @@ function renderTree() {
     counts.set('', (counts.get('') || 0) + 1);
     while (d) { counts.set(d, (counts.get(d) || 0) + 1); d = dirOf(d); }
   }
+  ALLC = null;
+  if (!S.q && !S.pick && pool.length !== S.files.length) {
+    ALLC = new Map();
+    for (const f of S.files) { let d = f.d; while (d) { ALLC.set(d, (ALLC.get(d) || 0) + 1); d = dirOf(d); } }
+  }
   const kids = new Map();
   for (const d of S.q ? [...counts.keys()].filter(Boolean) : S.dirs) { const par = dirOf(d); (kids.get(par) || kids.set(par, []).get(par)).push(d); }
   const out = [`<div class="node ${S.folder === '' ? 'on' : ''}" data-drop="" data-d=""><span class="tw"></span><span class="lb"><b>All folders</b></span><span class="ct">${counts.get('') || 0}</span><button class="more" data-more aria-label="Folder actions" title="Folder actions">⋯</button></div>`];
   const walk = (par, depth) => {
     for (const d of (kids.get(par) || []).filter(d => par !== '' || d[0] !== ':').sort(cmp)) {
       const has = kids.has(d), open = S.open.has(d) || (S.q && has), n = counts.get(d) || 0;
-      out.push(`<div class="node ${S.folder === d ? 'on' : ''}${n ? '' : ' zero'}${kept(d) ? ' kept' : ''}${cutCls(d)}" draggable="${DRAG && !kept(d)}" data-drop="${esc(d)}" data-d="${esc(d)}" style="padding-left:${depth * 14}px" title="${esc(d)}"><button class="tw" data-tw tabindex="-1" ${has ? '' : 'disabled'} aria-label="Expand">${has ? (open ? '▼' : '▶') : ''}</button><span class="lb" title="${esc(d)}${kept(d) ? '' : ' — double-click to rename'}">${esc(baseOf(d))}</span>${kept(d) ? LOCK : ''}<span class="ct">${n || ''}</span><button class="more" data-more tabindex="-1" aria-label="Folder actions" title="Folder actions">⋯</button></div>`);
+      out.push(`<div class="node ${S.folder === d ? 'on' : ''}${n ? '' : ' zero'}${kept(d) ? ' kept' : ''}${cutCls(d)}" draggable="${DRAG && !kept(d)}" data-drop="${esc(d)}" data-d="${esc(d)}" style="padding-left:${depth * 14}px" title="${esc(nice(d))}"><button class="tw" data-tw tabindex="-1" ${has ? '' : 'disabled'} aria-label="Expand">${has ? (open ? '▼' : '▶') : ''}</button><span class="lb" title="${esc(nice(d))}${kept(d) ? '' : ' — double-click to rename'}">${esc(baseOf(d))}</span>${kept(d) ? LOCK : ''}<span class="ct">${n || offCount(d)}</span><button class="more" data-more tabindex="-1" aria-label="Folder actions" title="Folder actions">⋯</button></div>`);
       if (has && open) walk(d, depth + 1);
     }
   };
@@ -950,7 +966,7 @@ function renderTree() {
     if (l.offline) { out.push(`<div class="locoff" title="${esc(l.root)} — not connected right now"><span class="lb">↗ ${esc(l.name)}</span><span class="ct">not connected</span></div>`); continue; }
     if (S.q && !counts.has(d)) continue;
     const has = kids.has(d), open = S.open.has(d) || (S.q && has), n = counts.get(d) || 0;
-    out.push(`<div class="node loc ${S.folder === d ? 'on' : ''}${n ? '' : ' zero'}" data-drop="${esc(d)}" data-d="${esc(d)}" title="${esc(l.root)}"><button class="tw" data-tw tabindex="-1" ${has ? '' : 'disabled'} aria-label="Expand">${has ? (open ? '▼' : '▶') : ''}</button><span class="lb">↗ ${esc(l.name)}</span><span class="ct">${n || (S.q ? 0 : 'empty')}</span></div>`);
+    out.push(`<div class="node loc ${S.folder === d ? 'on' : ''}${n ? '' : ' zero'}" data-drop="${esc(d)}" data-d="${esc(d)}" title="${esc(l.root)}"><button class="tw" data-tw tabindex="-1" ${has ? '' : 'disabled'} aria-label="Expand">${has ? (open ? '▼' : '▶') : ''}</button><span class="lb">↗ ${esc(l.name)}</span><span class="ct">${n || (S.q ? 0 : offCount(d) || 'empty')}</span></div>`);
     if (has && open) walk(d, 1);
   }
   const t = $('#tree'), y = t.scrollTop;
@@ -1042,6 +1058,21 @@ function updateSel() {
   const n = S.shown.length + S.tiles.length, sum = l => l.reduce((a, f) => a + (f ? f.s : 0), 0);
   $('#statusbar').textContent = `${n.toLocaleString()} item${n === 1 ? '' : 's'}` + (S.sel.size ? ` · ${S.sel.size.toLocaleString()} selected (${fmtSize(sum([...S.sel].map(p => S.byPath.get(p))))})` : '') + (S.shown.length ? ' · ' + fmtSize(sum(S.shown)) : '');
 }
+// What the gallery says when the open folder shows nothing. It tells the truth about why: the folder really is empty, or it
+// holds files of kinds that are switched off at the top — then it says how many and of which kind, with a button that switches
+// that kind on (the same as pressing it at the top). Which files the buttons show is not changed by any of this.
+function emptyFolderHTML() {
+  const d = S.folder, pre = d + '/', name = esc(nameOfDir(d));
+  if (S.pick) return `<div class="empty"><b>Nothing to show in ${name}</b>None of the picked files are in this folder.</div>`;
+  const off = { m: 0, i: 0, o: 0 };
+  let n = 0;
+  for (const f of S.files) if ((f.d === d || f.d.startsWith(pre)) && !kindShown(f)) { off[f.k] = (off[f.k] || 0) + 1; n++; }
+  if (!n) return `<div class="empty"><b>${name} is empty</b>Drag files or folders onto it in the list on the left.</div>`;
+  const ks = ['m', 'i', 'o'].filter(k => off[k]), names = ks.map(k => KIND_NAME[k]);
+  const list = names.length > 1 ? names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1] : names[0];
+  return `<div class="empty"><b>Nothing of the kinds switched on in ${name}</b>${n.toLocaleString()} other file${n === 1 ? ' is' : 's are'} here, under ${esc(list)}. Switch ${ks.length > 1 ? 'those' : 'that'} on above to see ${n === 1 ? 'it' : 'them'}.<div class="emptybtns">${ks.map(k => `<button class="btn" data-kon="${k}">Switch on ${esc(KIND_NAME[k])}</button>`).join('')}</div></div>`;
+}
+document.addEventListener('click', e => { const b = e.target.closest('[data-kon]'); if (!b) return; const chip = document.querySelector(`#chips .chip[data-k="${b.dataset.kon}"]`); if (chip && !chip.classList.contains('on')) chip.click(); });
 function toggleSel(i, range) {
   const f = S.shown[i]; if (!f) return;
   if (range && S.lastSel >= 0) { for (let k = Math.min(i, S.lastSel); k <= Math.max(i, S.lastSel); k++) if (S.shown[k]) S.sel.add(S.shown[k].p); }
@@ -1087,14 +1118,35 @@ async function load(url) {
   if (r.sig !== S.sig || r.ai !== S.aiRev || !S.scannedAt) applyData(r);
   else { S.pending = r.pending; S.scannedAt = r.at; S.error = ''; setStatus(); }
 }
-let scanning = false, pollT;
-async function rescan() {
-  if (scanning) return;
-  scanning = true; $('#rescan').disabled = true;
-  try { await load('/api/scan'); if (S.view === 'review') loadReview(); }
-  catch (e) { S.error = e.message; setStatus(); if (!S.files.length) $('#main').innerHTML = `<div class="empty"><b>Can’t reach the folder</b>${esc(e.message)}</div>`; }
-  finally { scanning = false; $('#rescan').disabled = false; }
+let scanning = false, pollT, scanTok = 0;
+// A check of the folders that gets no answer (a cloud drive whose app has stopped, a network drive that has gone) would leave the
+// window showing the list saved last time, with nothing to say so. While a check is being waited for, the program is asked every
+// few seconds how it is getting on: it counts every folder and file it reads, so a big library that is slowly being read keeps
+// counting and is left in peace, and only a check that has read NOTHING for STALL_MS brings up the notice. It goes away by itself
+// when the check finishes or starts moving again. (Should the program not answer that question at all, the time waited is used.)
+const STALL = { on: false, first: true }, STALL_MS = 25000;
+function watchScan(my) {
+  const t0 = Date.now();
+  const iv = setInterval(async () => {
+    if (my !== scanTok || !scanning) return clearInterval(iv);
+    let idle = Date.now() - t0;
+    try { const r = await api('/api/status?since=' + S.seq); if (r.scan) idle = r.scan.on ? r.scan.idle : 0; } catch {}
+    if (my !== scanTok || !scanning) return clearInterval(iv);
+    const on = idle >= STALL_MS;
+    if (on !== STALL.on) { STALL.on = on; drawNotes(); }
+  }, 5000);
 }
+// again: pressed on the "still checking" notice — a check that is stuck is given up on and a new one started
+async function rescan(again) {
+  if (scanning) return;
+  const my = ++scanTok;
+  scanning = true; $('#rescan').disabled = true;
+  watchScan(my);
+  try { await load('/api/scan' + (again === true ? '?again=1' : '')); if (my === scanTok) STALL.first = false; if (S.view === 'review') loadReview(); }
+  catch (e) { if (my === scanTok) { S.error = e.message; setStatus(); if (!S.files.length) $('#main').innerHTML = `<div class="empty"><b>Can’t reach the folder</b>${esc(e.message)}</div>`; } }
+  finally { if (my === scanTok) { scanning = false; $('#rescan').disabled = false; if (STALL.on) { STALL.on = false; drawNotes(); } } }
+}
+function rescanStuck() { scanTok++; scanning = false; STALL.on = false; drawNotes(); return rescan(true).then(() => startPoll()); }
 async function poll() {
   clearTimeout(pollT);
   let next = 3000;
@@ -1126,7 +1178,7 @@ function finishOp(r, verb) {
   S.sel.clear();
   applyData(r.data);
   const main = r.done.filter(d => !d.aside), aside = r.done.length - main.length, n = r.done.length;   // aside: a file that was already there and was set aside so another could take its place
-  let msg = main.length ? verb(main.length === 1 ? '“' + baseOf(main[0].from) + '”' : main.length + ' items') : 'Nothing was changed';
+  let msg = main.length ? verb(main.length === 1 ? '“' + nameOf(main[0].from) + '”' : main.length + ' items') : 'Nothing was changed';
   if (aside) msg += ` · ${aside} replaced (the old ${aside === 1 ? 'one is' : 'ones are'} in ${S.trash})`;
   if (r.skipped.length) msg += ` · ${r.skipped.length} skipped (${r.skipped[0].why})`;
   if (r.cancelled) msg += ' · stopped before the rest';
@@ -1173,7 +1225,7 @@ async function doMove(items, to) {
 }
 async function moveWithPicker(items) {
   items = freeOnly(items); if (!items.length) return;
-  const to = await pickFolder(items.length === 1 ? `Move “${baseOf(items[0])}” to…` : `Move ${items.length} items to…`, items.filter(i => S.dirs.includes(i)));
+  const to = await pickFolder(items.length === 1 ? `Move “${nameOf(items[0])}” to…` : `Move ${items.length} items to…`, items.filter(i => S.dirs.includes(i)));
   if (to !== null) doMove(items, to);
 }
 // Hidden folders that sit inside the given folders. The gallery does not show them, so removing or merging one of these folders
@@ -1190,10 +1242,10 @@ async function doRemove(items, isFolder) {
   items = freeOnly(items); if (!items.length) return;
   const dirs = items.filter(i => S.dirs.includes(i)), hid = await carriesHidden(dirs);
   if (isFolder) {
-    const ok = await ask({ title: `Remove the folder “${baseOf(items[0])}”?`, text: `The folder and everything in it will be moved to “${S.trash}”. Nothing is deleted, and you can undo it.` + (hid ? ' ' + hid : ''), ok: 'Remove folder', danger: true });
+    const ok = await ask({ title: `Remove the folder “${nameOf(items[0])}”?`, text: `The folder and everything in it will be moved to “${S.trash}”. Nothing is deleted, and you can undo it.` + (hid ? ' ' + hid : ''), ok: 'Remove folder', danger: true });
     if (!ok) return;
   } else if (hid) {
-    if (!(await ask({ title: `Remove ${items.length === 1 ? '“' + baseOf(items[0]) + '”' : 'these ' + items.length + ' items'}?`, text: `${hid} Everything goes to “${S.trash}”. Nothing is deleted, and you can undo it.`, ok: 'Remove', danger: true }))) return;
+    if (!(await ask({ title: `Remove ${items.length === 1 ? '“' + nameOf(items[0]) + '”' : 'these ' + items.length + ' items'}?`, text: `${hid} Everything goes to “${S.trash}”. Nothing is deleted, and you can undo it.`, ok: 'Remove', danger: true }))) return;
   }
   try { finishOp(await api('/api/fs/remove', { items }), what => `Moved ${what} to ${S.trash}`); } catch (e) { toast(e.message); }
 }
@@ -1232,7 +1284,7 @@ async function suggestName(items) {
         + (dirs ? `for the ${dirs} folder${dirs === 1 ? '' : 's'}: the names of the folders inside, how many files, a few sample file names with their descriptions, and common tags` : '');
     const first = !pics ? '' : one ? `This file has no description yet, so its preview picture is sent to ${AIND()} first, which writes one. Then `
       : `${pics} of the files ${pics === 1 ? 'has' : 'have'} no description yet, so ${pics === 1 ? 'its preview picture is' : 'their preview pictures are'} sent to ${AIND()} first, which describes ${pics === 1 ? 'it' : 'them'}. Then `;
-    if (!(await ask({ title: one ? `Ask ${AIN()} to suggest a name for “${baseOf(items[0])}”?` : `Ask ${AIN()} to suggest names for these ${items.length} items?`,
+    if (!(await ask({ title: one ? `Ask ${AIN()} to suggest a name for “${nameOf(items[0])}”?` : `Ask ${AIN()} to suggest names for these ${items.length} items?`,
       text: `${first}${AIN()} is sent ${what}. Your model files never leave this computer. ` + (one ? 'The suggestion comes back in a box for you to use, change or ignore — nothing is renamed unless you press Rename.' : 'The suggestions go to Review — nothing is renamed until you approve it there.'), ok: 'Ask ' + AIN() }))) return;
     if (files.length) LS.set('nameask', 1);
     if (dirs) LS.set('nameaskf', 1);
@@ -1488,7 +1540,7 @@ const extras = (kind, ctx) => PG.menuExtras[kind].map(fn => { try { return fn(ct
 function clipSet(mode, items) {
   CLIP.mode = items.length ? mode : ''; CLIP.items = items.slice(); CLIP.set = new Set(items);
   updateSel(); renderTree();
-  if (items.length) toast(`${mode === 'cut' ? 'Cut' : 'Copied'} ${items.length === 1 ? '“' + baseOf(items[0]) + '”' : items.length + ' items'} — open a folder and paste`);
+  if (items.length) toast(`${mode === 'cut' ? 'Cut' : 'Copied'} ${items.length === 1 ? '“' + nameOf(items[0]) + '”' : items.length + ' items'} — open a folder and paste`);
 }
 const cutItems = items => { if (items.length && canChange() && (items = freeOnly(items)).length) clipSet('cut', items); };
 const copyItems = items => { if (items.length) clipSet('copy', items); };
@@ -2113,7 +2165,7 @@ async function loadReview() {
 }
 function reviewRow(s) {
   if (s.type === 'ai-plan') {
-    const c = x => `<code>${esc(x)}</code>`;
+    const c = x => `<code>${esc(nice(x))}</code>`;
     const t = s.op === 'create' ? `Create the folder ${c(s.p)}` : s.op === 'move' ? `Move the folder ${c(s.p)} into ${c(s.to)}`
       : s.op === 'rename' ? `Rename the folder ${c(s.p)} to ${c(s.to)}` : s.op === 'split' ? `Split ${c(s.p)} into more specific folders` : `Merge everything in ${c(s.p)} into ${c(s.to)}`;
     if (s.op === 'split') return `<div class="row${RSEL.has(s.id) ? ' picked' : ''}" data-id="${s.id}">${tick(s)}<div class="bd"><div class="t1">${t}</div><div class="t2">${esc(s.why)} ${AIN()} looks at every file in the folder and puts its suggestions here.</div></div>
@@ -2166,7 +2218,7 @@ function approveRow(row, moveOn) {
     try {
       const r = await api('/api/review/apply', { id, ...(nm ? { name } : {}) }), a = r.action;
       EDITS.delete(id);
-      toast(r.kept ? 'Kept the name it already has' : !a ? 'Done' : a.type === 'rename' ? 'Renamed to ' + baseOf(a.to) : a.type === 'move' ? 'Moved into ' + (dirOf(a.to) || 'the top folder') : 'Removed', r.done.length ? { label: 'Undo', fn: () => undoMany(r.done.map(d => d.id)) } : null);
+      toast(r.kept ? 'Kept the name it already has' : !a ? 'Done' : a.type === 'rename' ? 'Renamed to ' + baseOf(a.to) : a.type === 'move' ? 'Moved into ' + (nice(dirOf(a.to)) || 'the top folder') : 'Removed', r.done.length ? { label: 'Undo', fn: () => undoMany(r.done.map(d => d.id)) } : null);
     } catch (err) { toast(err.message); }
     BUSY.delete(id);
     await loadReview();
@@ -2192,14 +2244,29 @@ async function openLocations() {
     b.disabled = true;
     try {
       if (b.dataset.ladd !== undefined) {
-        let r;
-        try { r = await api('/api/locations/add', {}); }
-        catch (err) {
-          if (!/Choose a folder on this computer/.test(err.message)) throw err;
-          const p = await ask({ title: 'Add a folder', text: 'Type or paste the full path of the folder, for example C:\\Users\\You\\Downloads', value: '', ok: 'Add' });
-          if (!p) { b.disabled = false; return; }
-          r = await api('/api/locations/add', { root: p });
+        // The program decides whether the folder is too broad (folders.js) and words what is said; this only asks and goes round again.
+        // A whole drive, a whole user folder and the like: refused, choose again. Documents, Desktop, a cloud drive's top folder:
+        // a question whose ready answer is "Choose a different folder".
+        let r = null, root = '', sure = false;
+        for (;;) {
+          try { r = await api('/api/locations/add', root ? { root, sure } : {}); break; }
+          catch (err) {
+            const x = err.data || {};
+            if (/Choose a folder on this computer/.test(err.message) && !root) {
+              const p = await ask({ title: 'Add a folder', text: 'Type or paste the full path of the folder, for example C:\\Users\\You\\Downloads', value: '', ok: 'Add' });
+              if (!p) break;
+              root = p; sure = false;
+            }
+            else if (x.refused) { if (!(await ask({ title: 'That folder can’t be added', text: err.message, ok: 'Choose a different folder' }))) break; root = ''; sure = false; }
+            else if (x.warn) {
+              const a = await ask({ title: x.warn.title, text: x.warn.text, ok: x.warn.use, cancel: x.warn.other, extra: 'Cancel' });
+              if (a && a.extra) break;
+              if (a) { root = x.warn.path; sure = true; } else { root = ''; sure = false; }
+            }
+            else throw err;
+          }
         }
+        if (!r) { b.disabled = false; return; }
         if (!r.cancelled) { toast(`“${r.name}” added — its files are appearing in the gallery`); await refresh(); }
       } else if (b.dataset.lremove !== undefined) {
         if (await ask({ title: `Stop showing “${name}”?`, text: 'The folder and everything in it stay exactly as they are. It simply no longer appears in the gallery; you can add it again at any time.', ok: 'Remove from list' })) { await api('/api/locations/remove', { name }); if (S.folder === ':' + name || S.folder.startsWith(':' + name + '/')) S.folder = ''; await refresh(); }
@@ -2315,7 +2382,7 @@ async function hideFolder(d) {
   try {
     const r = await api('/api/hidden/set', { dirs: [d], hide: true });
     applyData(r.data); if (S.view === 'review') loadReview();
-    toast(`“${baseOf(d)}” is hidden. Its files are untouched — bring it back from “Hidden folders” at the foot of the folder list.`, { label: 'Undo', fn: () => unhide([d]) });
+    toast(`“${nameOf(d)}” is hidden. Its files are untouched — bring it back from “Hidden folders” at the foot of the folder list.`, { label: 'Undo', fn: () => unhide([d]) });
   } catch (e) { toast(e.message); }
 }
 async function unhide(dirs, all) {
@@ -2323,7 +2390,7 @@ async function unhide(dirs, all) {
   try {
     const r = await api('/api/hidden/set', all ? { all: true, hide: false } : { dirs, hide: false });
     applyData(r.data); if (S.view === 'review') loadReview();
-    toast(all ? 'Every hidden folder is showing again' : dirs.length === 1 ? `“${baseOf(dirs[0])}” is showing again` : 'Showing again', all ? null : { label: 'Hide again', fn: async () => { try { applyData((await api('/api/hidden/set', { dirs, hide: true })).data); if ($('#hiddendlg').open) openHidden(); if (S.view === 'review') loadReview(); } catch (e) { toast(e.message); } } });
+    toast(all ? 'Every hidden folder is showing again' : dirs.length === 1 ? `“${nameOf(dirs[0])}” is showing again` : 'Showing again', all ? null : { label: 'Hide again', fn: async () => { try { applyData((await api('/api/hidden/set', { dirs, hide: true })).data); if ($('#hiddendlg').open) openHidden(); if (S.view === 'review') loadReview(); } catch (e) { toast(e.message); } } });
     return r;
   } catch (e) { toast(e.message); return null; }
 }
@@ -2353,7 +2420,7 @@ async function condenseFolder(d) {
   if (!aiOn(AI.st)) { toggleAI(true); return toast('Add your API key in the ' + AIN() + ' panel first.'); }
   const n = S.dirs.filter(x => dirOf(x) === d).length;
   if (n < 2) return toast('There are fewer than two folders inside that one, so there is nothing to condense.');
-  if (!(await ask({ title: `Ask ${AIN()} to condense “${baseOf(d)}”?`, text: `${AIN()} reads the names of the ${n} folders directly inside this one, how many files each holds, and a few sample file names and descriptions from each. It suggests which folders belong together — merging them, or lifting a near-empty one up into this folder. The steps go to Review; nothing moves until you approve.`, ok: 'Condense with ' + AIN() }))) return;
+  if (!(await ask({ title: `Ask ${AIN()} to condense “${nameOf(d)}”?`, text: `${AIN()} reads the names of the ${n} folders directly inside this one, how many files each holds, and a few sample file names and descriptions from each. It suggests which folders belong together — merging them, or lifting a near-empty one up into this folder. The steps go to Review; nothing moves until you approve.`, ok: 'Condense with ' + AIN() }))) return;
   try { aiApply(await api('/api/ai/condense', { dir: d })); toggleAI(true); aiPoll(); } catch (e) { toast(e.message); }
 }
 async function loadSlicers() { if (REMOTE) return; try { Object.assign(SL, await api('/api/slicers')); } catch {} }
@@ -2365,8 +2432,14 @@ async function pollDesk() {
   } catch {}
   drawNotes();
 }
+// A home folder or location chosen before 2.1.5 that would be refused today (a whole drive, a whole user folder …). It keeps
+// working. The notice is shown until it is answered, once per folder on this device; nothing is done unless a button is pressed.
+const broadId = b => b.use + '|' + String(b.path).toLowerCase();
+const broadNote = () => REMOTE ? null : (ABOUT.broad || []).find(b => !LS.get('broadseen', []).includes(broadId(b))) || null;
 function drawNotes() {
   let h = '';
+  if (STALL.on) h += `<div class="note" data-note="stall"><span><b>Still checking your folders…</b> A cloud drive may be slow to answer. ${STALL.first ? `What you see is from the last time ${esc(APP())} ran.` : 'What you see is from the last check.'}</span><button class="btn primary" data-n="stallscan">Rescan</button></div>`;
+  { const b = broadNote(); if (b) h += `<div class="note warn" data-note="broad"><span><b>${esc(b.title)}.</b> ${esc(b.text)}</span>${b.use === 'home' && !ABOUT.canChooseHome ? '' : `<button class="btn primary" data-n="broadgo">${esc(b.button)}</button>`}<button class="btn" data-n="broadok">${esc(b.later)}</button></div>`; }
   if (NEWS.offer && !ABOUT.outdated) h += `<div class="note"><span><b>${esc(APP())} has been updated to version ${esc(NEWS.offer)}.</b></span><button class="btn primary" data-n="news">What’s new</button><button class="btn" data-n="newsok">OK</button></div>`;
   if (ABOUT.outdated) h += `<div class="note warn"><span><b>Look only.</b> This library was last used with ${esc(APP())} ${esc(ABOUT.outdated.theirs)}; this ${REMOTE ? 'computer' : 'copy'} has ${esc(ABOUT.outdated.mine)}. You can browse and view, but nothing can be changed until it is updated${REMOTE ? ' on the computer' : ''}.</span>${ABOUT.canUpdate ? '<button class="btn primary" data-n="update">Update now</button>' : ''}</div>`;
   else if (ABOUT.update && ABOUT.canUpdate && !NOTE_HIDE.has('upd' + ABOUT.update.latest)) h += `<div class="note"><span><b>${esc(APP())} ${esc(ABOUT.update.latest)} is available.</b> You have ${esc(ABOUT.version)}.</span><button class="btn primary" data-n="update">Update…</button><button class="btn" data-n="later">Later</button></div>`;
@@ -2386,6 +2459,18 @@ $('#notes').addEventListener('click', async e => {
   b.disabled = true;
   try {
     if (n === 'news') openWhatsNew();
+    else if (n === 'stallscan') rescanStuck();
+    else if (n === 'broadok' || n === 'broadgo') {
+      const bn = broadNote();
+      if (!bn) {}
+      else if (n === 'broadok') LS.set('broadseen', [...LS.get('broadseen', []), broadId(bn)].slice(-50));
+      else if (bn.use === 'home') await api('/api/home/choose', {});   // opens the folder chooser; the notice stays until a folder is chosen or "Keep it as it is" is pressed
+      else if (await ask({ title: `Stop showing “${bn.name}”?`, text: 'The folder and everything in it stay exactly as they are. It simply no longer appears in the gallery. Afterwards, add the folder your 3D files are in with Locations > Add a folder.', ok: 'Remove from list' })) {
+        await api('/api/locations/remove', { name: bn.name });
+        if (S.folder === ':' + bn.name || S.folder.startsWith(':' + bn.name + '/')) S.folder = '';
+        S.sig = ''; await rescan(); await loadAbout();
+      }
+    }
     else if (n === 'newsok') newsSeen();
     else if (n === 'update') await api('/api/update/start', {});
     else if (n === 'later') NOTE_HIDE.add('upd' + ABOUT.update.latest);
@@ -2576,7 +2661,7 @@ $('#review').addEventListener('click', async e => {
       const to = await pickDest(`Move “${row.querySelector('.t1').textContent}” to…`);
       if (to !== null) {
         const r = await api('/api/review/apply', { id: row.dataset.id, to });
-        toast('Moved into ' + (to || 'the top folder'), r.done.length ? { label: 'Undo', fn: () => undoMany(r.done.map(d => d.id)) } : null);
+        toast('Moved into ' + (nice(to) || 'the top folder'), r.done.length ? { label: 'Undo', fn: () => undoMany(r.done.map(d => d.id)) } : null);
         await loadReview();
       }
     }
@@ -2585,13 +2670,13 @@ $('#review').addEventListener('click', async e => {
       const to = await pickDest(`Move these ${items.length} files to…`);
       if (to !== null) {
         const r = await api('/api/review/apply-all', { ids: items.map(x => x.id), to });
-        toast(`${r.applied} moved into ${to || 'the top folder'}` + (r.failed.length ? ` · ${r.failed.length} skipped (${r.failed[0].why})` : ''), r.done.length ? { label: 'Undo all', fn: () => undoMany(r.done.map(d => d.id)) } : null);
+        toast(`${r.applied} moved into ${nice(to) || 'the top folder'}` + (r.failed.length ? ` · ${r.failed.length} skipped (${r.failed[0].why})` : ''), r.done.length ? { label: 'Undo all', fn: () => undoMany(r.done.map(d => d.id)) } : null);
         S.sig = ''; await rescan(); if (S.view === 'review') await loadReview();
       }
     }
     else if (b.dataset.apply !== undefined) {
       const s = R.items.find(x => x.id === row.dataset.id), hid = s && s.type === 'ai-plan' && s.op === 'merge' ? await carriesHidden([s.p]) : '';   // a merge takes a hidden folder inside it along
-      if (!hid || await ask({ title: `Merge “${baseOf(s.p)}” into “${baseOf(s.to)}”?`, text: hid + ' It moves with everything else and stays hidden. The step is recorded in the history and can be undone.', ok: 'Merge' })) await approveRow(row, false);
+      if (!hid || await ask({ title: `Merge “${nameOf(s.p)}” into “${nameOf(s.to)}”?`, text: hid + ' It moves with everything else and stays hidden. The step is recorded in the history and can be undone.', ok: 'Merge' })) await approveRow(row, false);
     }
     else if (b.dataset.rmcopy !== undefined) {   // an exact copy of the file that has the suggested name: removed the way a duplicate is
       const r = await api('/api/review/apply', { id: row.dataset.id, removeCopy: true });
@@ -2806,12 +2891,12 @@ async function splitMany(dirs) {
   if (!aiOn(AI.st)) { toggleAI(true); return toast('Add your API key in the ' + AIN() + ' panel first.'); }
   const ok = dirs.filter(d => S.files.filter(f => f.d === d).length >= 4), few = dirs.length - ok.length;
   if (!ok.length) return toast('There are too few files directly in ' + (dirs.length === 1 ? 'that folder' : 'those folders') + ' to split.');
-  if (!(await ask({ title: ok.length === 1 ? `Ask ${AIN()} to split “${baseOf(ok[0])}”?` : `Ask ${AIN()} to split these ${ok.length} folders?`, text: `${AIN()} reads the names and descriptions of the files directly in ${ok.length === 1 ? 'this folder' : 'each folder, one folder after another'}, along with your folder names, and suggests a specific home for each file. The suggestions go to Review; nothing moves until you approve.` + (few ? ` ${few} with fewer than four files ${few === 1 ? 'is' : 'are'} left out.` : ''), ok: 'Split with ' + AIN() + '' }))) return;
+  if (!(await ask({ title: ok.length === 1 ? `Ask ${AIN()} to split “${nameOf(ok[0])}”?` : `Ask ${AIN()} to split these ${ok.length} folders?`, text: `${AIN()} reads the names and descriptions of the files directly in ${ok.length === 1 ? 'this folder' : 'each folder, one folder after another'}, along with your folder names, and suggests a specific home for each file. The suggestions go to Review; nothing moves until you approve.` + (few ? ` ${few} with fewer than four files ${few === 1 ? 'is' : 'are'} left out.` : ''), ok: 'Split with ' + AIN() + '' }))) return;
   RSEL.clear(); renderReview();
   for (let i = 0; i < ok.length; i++) {
     try {
       aiApply(await api('/api/ai/split', { dir: ok[i] }));
-      if (ok.length > 1) toast(`Splitting ${i + 1} of ${ok.length}: ${baseOf(ok[i])}…`);
+      if (ok.length > 1) toast(`Splitting ${i + 1} of ${ok.length}: ${nameOf(ok[i])}…`);
       for (;;) {
         await new Promise(r => setTimeout(r, 1500));
         const st = await api('/api/ai/status'); aiApply(st);
@@ -2824,7 +2909,7 @@ async function splitMany(dirs) {
   if (!aiOn(AI.st)) { toggleAI(true); return toast('Add your API key in the ' + AIN() + ' panel first.'); }
   const n = S.files.filter(f => f.d === d).length;
   if (n < 4) return toast('There are too few files directly in that folder to split.');
-  if (!(await ask({ title: `Ask ${AIN()} to split “${baseOf(d)}”?`, text: `${AIN()} reads the names and descriptions of the ${n} files directly in this folder, along with your folder names, and suggests a specific home for each one: an existing folder that fits, or a new folder beside this one when four or more belong together. Files that fit nowhere stay put. The suggestions go to Review; nothing moves until you approve.`, ok: 'Split with ' + AIN() + '' }))) return;
+  if (!(await ask({ title: `Ask ${AIN()} to split “${nameOf(d)}”?`, text: `${AIN()} reads the names and descriptions of the ${n} files directly in this folder, along with your folder names, and suggests a specific home for each one: an existing folder that fits, or a new folder beside this one when four or more belong together. Files that fit nowhere stay put. The suggestions go to Review; nothing moves until you approve.`, ok: 'Split with ' + AIN() + '' }))) return;
   try { aiApply(await api('/api/ai/split', { dir: d })); toggleAI(true); } catch (e) { toast(e.message); }
 }
 
@@ -2938,6 +3023,15 @@ PG.shortcuts = SHORTCUTS;
 // build being made now: it is shown under the number the program reports, as long as that is newer than every numbered entry.
 // When a release is cut, give it its number and start a new '' entry for the next one.
 const WHATSNEW = [
+  { v: '2.1.5', title: 'A warning before a whole drive or user folder is chosen', items: [
+    'A whole drive, your whole user folder, and the folders that belong to Windows and your other programs can no longer be chosen as your home folder or added as a location. You are asked to choose the folder your 3D files are in instead.',
+    'Choosing all of Documents, Desktop, Pictures, Music or Videos, or the top folder of a cloud drive, now asks first and suggests a folder just for your 3D files, such as Documents\\3D Prints. Adding Downloads as a location works as before.',
+    'If your home folder or a location is already one of those, it keeps working. A notice explains the risk once and offers to choose a different one.',
+    'A folder whose files are all of a kind that is switched off at the top no longer reads as empty. The folder list shows “0 of 12”, and the gallery says how many other files are there and offers to switch that kind on.',
+    'Messages no longer show a location with a stray colon in front of its name.',
+    'If checking your folders gets no answer after start, for example from a cloud drive, a notice now says so and offers Rescan. Before, the window kept showing the list from last time without a word.',
+    'About, in the Help window, now has a link to the PrintBinder website.',
+  ] },
   { v: '2.1.4', title: 'Other locations show their files at start', items: [
     'Other locations, such as a Downloads folder you added, could show as empty after starting the program until you pressed Rescan. They now fill in by themselves.',
   ] },
@@ -3470,7 +3564,10 @@ document.addEventListener('keydown', e => {
 document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - S.scannedAt > 30000) rescan(); });
 window.rescanNow = () => { S.sig = ''; return rescan(); };
 tellDesk();
-load('/api/files').catch(() => {}).then(rescan).then(poll);
+// the regular look for changes starts once the first check of the folders is in — or, if that one never answers, once a later one is
+let polling = false;
+function startPoll() { if (!polling) { polling = true; poll(); } }
+load('/api/files').catch(() => {}).then(() => rescan()).then(startPoll);
 api('/api/ai/status').then(aiApply).catch(() => {});
 </script>
 <script type="importmap">{"imports":{"three":"/vendor/three/build/three.module.js"}}</script>

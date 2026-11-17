@@ -96,7 +96,7 @@ The full statement is in the program under **Help > Privacy**.
 
 ### Coming from Print Gallery
 
-Updating a Print Gallery install (Help > Check for updates, then **Update and restart**) turns it into PrintBinder with nothing else to do. Nothing is moved or copied, so nothing can be lost:
+Running the PrintBinder installer on a computer that has Print Gallery turns that install into PrintBinder with nothing else to do. Nothing is moved or copied, so nothing can be lost:
 
 - A library that was used with Print Gallery keeps its data folder under the old name, `<home folder>\Print Gallery\data`. PrintBinder uses it as it is. Leave it where it is.
 - A computer that had Print Gallery keeps its settings folder under the old name, `%APPDATA%\Print Gallery`, with the saved AI keys, slicers, paired phones and other locations.
@@ -119,6 +119,7 @@ npm run dist       build the installer into dist\
 | `brand.js` | The one place for the program's name, maker, addresses and update source |
 | `main.js`, `preload.js` | The desktop window, menus, About, updates |
 | `server.js` | The local server behind the page: scanning, previews, moving, history. Listens on 127.0.0.1 only |
+| `folders.js` | Decides whether a chosen home folder or location is too broad (a whole drive, a whole user folder), and words the warning |
 | `desk.js` | Slicers and plugged-in drives |
 | `phone.js` | Phone access: the second listener, pairing, paired devices |
 | `ai.js`, `providers/` | The AI features and the three assistants |
@@ -127,7 +128,7 @@ npm run dist       build the installer into dist\
 | `zip.js` | Reads zip files: what is inside, and taking files out with a checksum check |
 | `public/index.html` | The whole page |
 | `build/` | The setup wizard: its settings, wording and pictures |
-| `scripts/` | Drawing the icon and installer pictures; writing the third-party notices |
+| `scripts/` | Drawing the icon and installer pictures; writing the third-party notices; `latest.json` after a build |
 | `docs/RELEASING.md` | The exact steps of a release |
 | `docs/RENAMING.md` | How the name change from Print Gallery was done, and how to do another |
 

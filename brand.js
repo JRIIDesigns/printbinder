@@ -17,15 +17,16 @@
 //                       "name"         LEAVE AS IT IS ("print-gallery"). It is never shown, and the installer keeps its own
 //                                      copy of the setup file in %LOCALAPPDATA%\<this>-updater.
 //   the pictures        npm run art    draws icon.png, icon.ico, public/logo.png and the three installer pictures in build/
-//                                      again: the name and the maker line are written on the side panel
+//                                      again: the name is written on the side panel, with "by" above the maker's logo
 //   public/index.html   the name where the page spells it out before the server has answered (the title and the header)
 //   README.md, docs/    the name in the text
 // "version" stays in package.json, as before. The electron-builder settings are no longer in package.json: its "build" entry
 // only points at build/builder.js, which works everything out from this file.
-// ---- THE TWO ADDRESSES ARE SWITCHED OFF until they exist. While a switch is false the address is EMPTY in the built program:
-// no website link is shown anywhere, and Help > Give feedback is not there at all. To turn one on, change its one line to true
-// and build again. Nothing else needs changing.
-const WEBSITE_IS_LIVE = false;          // true once https://jriidesigns.com/printbinder is on the internet
+// ---- THE TWO ADDRESSES EACH HAVE A SWITCH. Both are on: the website is live and the mailbox is read. While a switch is false
+// the address is EMPTY in the built program: no website link is shown anywhere (Help > About in the menu, and About in the Help
+// window, on the computer and on a paired phone), and Help > Give feedback is not there at all. To turn one off or on,
+// change its one line and build again. Nothing else needs changing.
+const WEBSITE_IS_LIVE = true;           // https://jriidesigns.com/printbinder/ is on the internet (switched on in 2.1.5)
 const FEEDBACK_MAILBOX_EXISTS = true;   // true once the mailbox info@printbinder.com has been created and is read
 
 const brand = {
@@ -38,7 +39,7 @@ const brand = {
   // JRII Designs is the trade name of Benjamin Mallah II, the author and copyright holder of this program.
   // That is recorded here and nowhere the program shows: the lines people see say JRII Designs only.
   copyright: 'Copyright (c) 2026 JRII Designs',   // the same line is in LICENSE: keep them alike
-  website: WEBSITE_IS_LIVE ? 'https://jriidesigns.com/printbinder' : '',
+  website: WEBSITE_IS_LIVE ? 'https://jriidesigns.com/printbinder/' : '',   // https, and with the slash at the end: the address as the site serves it
   feedbackEmail: FEEDBACK_MAILBOX_EXISTS ? 'info@printbinder.com' : '',
   // ---- identity. These tie a new installer to an existing install; changing them makes Windows see a different program.
   appId: 'local.printgallery',      // KEPT from "Print Gallery", so the PrintBinder installer updates an old install in place
@@ -63,7 +64,8 @@ function finish(b) {
   b.setupPrefix = prefix(b.name);                                                            // PrintBinder-Setup-
   b.formerSetupPrefixes = (b.formerNames || []).map(prefix);                                 // Print-Gallery-Setup-
   b.setupName = version => b.setupPrefix + version + '.exe';
-  // every name one release's installer is published under: its own, and one per former name for the installs that only know that
+  // every name an installer of one version may have: today's (the one a release carries, scripts/release-files.js), then one per
+  // former name. Nothing is published under a former name any more; the list is what isSetup below accepts
   b.setupNames = version => [b.setupPrefix, ...b.formerSetupPrefixes].map(p => p + version + '.exe');
   b.isSetup = file => { const n = String(file || ''); return [b.setupPrefix, ...b.formerSetupPrefixes].some(p => n.startsWith(p) && /^[\d.]+\.exe$/i.test(n.slice(p.length))); };
   b.publisherShown = b.publisher || b.name;

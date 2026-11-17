@@ -66,9 +66,11 @@ One thing to know: a Print Gallery install (2.0.2 or older) that opens a library
 
 ## 6. Getting existing installs to take the renamed version
 
-An installed copy only accepts an update whose setup file is named the way it expects. Print Gallery installs accept `Print-Gallery-Setup-<version>.exe` and nothing else; PrintBinder accepts that and `PrintBinder-Setup-<version>.exe` (`isSetup` in `brand.js`, from `formerNames`).
+An installed copy only accepts an update whose setup file is named the way it expects. Print Gallery installs accepted `Print-Gallery-Setup-<version>.exe` and nothing else; PrintBinder accepts `PrintBinder-Setup-<version>.exe`, and a file named after a former name as well if it is ever offered one (`isSetup` in `brand.js`, from `formerNames`).
 
-So each release carries the same installer under both names, and `latest.json` in a library's `updates` folder names the old-style file. `npm run dist` makes all three. The exact steps are in `docs/RELEASING.md`.
+For the first renamed versions each release therefore carried the same installer under both names. That has ended: the installs made before 2.1.0 were private copies and no longer exist, so from 2.1.5 a release carries one installer, `PrintBinder-Setup-<version>.exe`, and `latest.json` in a library's `updates` folder names that file. `npm run dist` makes both. The exact steps are in `docs/RELEASING.md`.
+
+After another rename, while installs under the old name are still in use, the release has to carry the old-named copy again for as long as they should be able to update: they will take nothing else.
 
 Old installs start the setup file with `--updated --force-run`; the setup wizard understands both, so the update works from any earlier version: the progress page shows, nothing is asked, and the program opens again by itself.
 
@@ -80,5 +82,5 @@ With the test build (`npm run dist:test`). It is called "<name> Test", installs 
 - an install made under the old name, updated by the renamed installer handed over by the old program itself: version, window title, one set of shortcuts under the new name, the old `.exe` gone, one entry in "Apps & features";
 - after that update: the home folder is not asked for again, and a saved AI key, the slicers and paired phones are still there;
 - a library last used under the old name opens with its previews and history, and no file outside its data folder has changed;
-- an update from the renamed version to a newer one, under either file name;
+- an update from the renamed version to a newer one;
 - uninstall with and without the settings tick box.

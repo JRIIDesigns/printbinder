@@ -17,6 +17,7 @@ const { spawn } = require('child_process');
 const os = require('os');
 const zip = require('./zip.js');
 
+const folders = require('./folders.js');   // is a chosen folder too broad to be a home folder or a location?
 const brand = require('./brand.js');   // the program's name, and the names of its own folder inside a library
 const ROOT = process.env.GALLERY_ROOT;   // the home library: chosen per computer by the desktop shell
 if (!ROOT) throw new Error('No home folder was given (GALLERY_ROOT).');
@@ -100,14 +101,18 @@ function keptDefaults() {
   out.push(__dirname, e.GALLERY_LOCAL || path.join(home || '.', '.print-gallery'));
   return out;
 }
-const KEPT = (() => {
+const KEPT_GIVEN = (() => {   // the list as the desktop shell handed it over, or null
   let list = null;
   const raw = process.env.GALLERY_PROTECTED;
   if (typeof raw === 'string' && raw.trim()) {
     try { const j = JSON.parse(raw); if (Array.isArray(j)) list = j; } catch {}
     if (!list) list = raw.split(';');
   }
-  if (!list) list = keptDefaults();
+  return list;
+})();
+const KEPT_LIST = KEPT_GIVEN || keptDefaults();
+const KEPT = (() => {
+  const list = KEPT_LIST;
   const seen = new Set(), out = [];
   for (const p of list) {
     if (typeof p !== 'string' || !p.trim() || p.includes('\0') || !path.isAbsolute(p.trim())) continue;
@@ -144,6 +149,33 @@ function keptWhy(abs) {
   const app = brandOf().name, me = path.basename(path.resolve(abs)) || path.resolve(abs), q = n => '\u201c' + n + '\u201d';
   const what = { windows: 'a folder Windows and your other programs use', drive: 'a whole drive', home: 'your home library folder', loc: 'one of the places ' + app + ' shows', own: 'a folder ' + app + ' keeps for itself' }[h.kind];
   return (h.self ? q(me) + ' is ' + what : q(me) + ' holds ' + (h.kind === 'home' || h.kind === 'drive' ? what : q(h.name) + ', ' + what)) + ', so ' + app + ' leaves its name and place alone. The files inside it can still be moved.';
+}
+// ---------- folders that are too broad to choose (folders.js) ----------
+// The same list, sorted into kinds: a whole drive, a whole user folder, AppData, Program Files, Windows and the program's own
+// folders cannot be added as a location at all; Documents, Desktop, Pictures, Music, Videos and a cloud drive's top folder can,
+// after a question. The desktop shell says which folder is which in GALLERY_FOLDER_KINDS ({ folder: kind }, asked of Windows).
+// With a list but no kinds, the kinds are told from the names. With neither — a test, or the server started by hand — both come
+// from the environment, and the temp folder is not counted as part of AppData (that is where tests keep their made-up libraries).
+const CHOICE = (() => {
+  let kinds = null;
+  try { const j = JSON.parse(process.env.GALLERY_FOLDER_KINDS || ''); if (j && typeof j === 'object' && !Array.isArray(j)) kinds = j; } catch {}
+  const bare = !KEPT_GIVEN && !kinds;
+  if (bare) kinds = { ...folders.hintsFromEnv(process.env, os.homedir()), [__dirname]: 'own', [process.env.GALLERY_LOCAL || path.join(os.homedir() || '.', '.print-gallery')]: 'own' };
+  return folders.build(KEPT_LIST, kinds || {}, { except: bare ? [os.tmpdir()] : [] });
+})();
+const choiceOf = (dir, use, more) => folders.check(dir, use, CHOICE, brandOf().name, more);
+// An install from before this rule may already have such a folder as its home folder or as a location. It keeps working; the
+// window says so once, with a way to choose another home folder or to take the location off the list. Nothing is done by itself.
+function broadNotes() {
+  const out = [], app = brandOf().name;
+  const one = (l, use) => {
+    try {
+      const c = folders.classify(l.root, use, CHOICE);
+      if (c.level === 'refuse') out.push({ use, name: l.home ? '' : l.name, path: c.path, kind: c.kind, ...folders.noticeText(c, app, l.name) });
+    } catch (e) { log('folder check', e.message); }
+  };
+  for (const l of LOCS) if (l.home) one(l, 'home'); else if (!l.usb) one(l, 'location');
+  return out;
 }
 const keptRel = rel => { try { return keptWhy(absOf(rel)); } catch { return ''; } };
 // For the window: which of the listed folders are left alone, so it does not offer what would be refused. Worked out from the
@@ -476,9 +508,27 @@ function redoPreviews() {
 }
 
 // ---------- scan ----------
-let lastScan = null, scanP = null;
-const scan = () => scanP || (scanP = doScan().finally(() => { scanP = null; }));
-const freshScan = async () => { if (scanP) await scanP.catch(() => {}); return scan(); };
+let lastScan = null, scanP = null, scanGen = 0;
+// How the scan in hand is getting on: every folder read and every file looked at counts as progress, so the window can tell a
+// big library that is slowly being read from a drive that has stopped answering (a cloud drive whose app is not running).
+const scanStat = { on: false, seen: 0, at: 0 };
+const SCAN_STUCK = 20000;   // this long with no progress at all, and a scan may be given up on when a fresh one is asked for
+const scan = () => {
+  if (scanP) return scanP;
+  const gen = ++scanGen;
+  Object.assign(scanStat, { on: true, seen: 0, at: Date.now() });
+  const p = doScan(gen).finally(() => { if (scanP === p) scanP = null; if (gen === scanGen) scanStat.on = false; });
+  return scanP = p;
+};
+// again: the owner pressed Rescan on the "still checking" notice. A scan that has stopped making progress is then left behind
+// (whatever it may still answer is thrown away) and a new one is started; one that is getting on is waited for as usual.
+const freshScan = async again => {
+  if (scanP) {
+    if (again === true && scanStat.on && Date.now() - scanStat.at >= SCAN_STUCK) { log('scan: no answer for', Math.round((Date.now() - scanStat.at) / 1000) + 's, starting again'); scanP = null; }
+    else await scanP.catch(() => {});
+  }
+  return scan();
+};
 const tag = f => { const ext = extOf(f.p); f.k = kindOf(ext); if (MODEL.has(ext) || HEIC.has(ext)) f.key = thumbKey(f); return ext; };
 const sigOf = (files, dirs) => sha(files.map(f => f.p + '|' + f.s + '|' + f.m).join('\n') + '\n#' + dirs.join('\n'));
 { // start from the saved index so the window fills instantly; a real scan follows and only changes are applied
@@ -517,13 +567,20 @@ async function sweepStrays(rels) {
   return n;
 }
 
-async function doScan() {
+// test hook: GALLERY_TEST_SCAN = "stall:<ms>" makes the first scan after start wait that long before it reads anything (a drive
+// that does not answer); "slow:<ms>" makes it wait that long after every folder it reads (a big library, getting on slowly)
+const TEST_SCAN = /^(stall|slow):(\d+)$/.exec(process.env.GALLERY_TEST_SCAN || '');
+async function doScan(gen) {
   const t0 = Date.now();
   const files = [], dirs = [], strays = [];
+  const mine = () => gen === scanGen, step = () => { if (mine()) { scanStat.seen++; scanStat.at = Date.now(); } };
+  if (TEST_SCAN && gen === 1 && TEST_SCAN[1] === 'stall') await new Promise(r => setTimeout(r, +TEST_SCAN[2]));
   async function rec(rel) {
     let ents;
     try { ents = await fsp.readdir(rel ? absOf(rel) : ROOT, { withFileTypes: true }); }
     catch (e) { if (!rel) throw e; return; }
+    step();
+    if (TEST_SCAN && gen === 1 && TEST_SCAN[1] === 'slow') await new Promise(r => setTimeout(r, +TEST_SCAN[2]));
     const subs = [];
     await Promise.all(ents.map(async e => {
       const r = rel ? rel + '/' + e.name : e.name;
@@ -535,6 +592,7 @@ async function doScan() {
         if (SKIP_NAMES.has(e.name.toLowerCase()) || e.name.startsWith('~$') || e.name.startsWith('._') || e.name.endsWith('.pgpart')) return;   // .pgpart: a copy still being written
         const st = await fsp.stat(absOf(r)).catch(() => null);
         if (st) files.push({ p: r, s: st.size, m: Math.round(st.mtimeMs) });
+        step();
       }
     }));
     subs.sort();
@@ -549,6 +607,7 @@ async function doScan() {
     dirs.push(top);
     await rec(top);
   }
+  if (!mine()) return lastScan;   // given up on while it was stuck: a newer scan has the say now
   files.sort((a, b) => a.p < b.p ? -1 : a.p > b.p ? 1 : 0);
   if (!swept && !OUTDATED) { swept = true; if (strays.length) sweepStrays(strays).catch(e => log('sweep', e.message)); }   // once, at start; a look-only copy changes nothing
 
@@ -1442,6 +1501,14 @@ function watchLoc(l) {
 async function addLocation(dir, opt) {
   if (typeof dir !== 'string' || !dir.trim() || dir.includes('\0') || !path.isAbsolute(dir)) throw new Error('Choose a folder on this computer.');
   const root = path.resolve(dir);
+  // Too broad to be a location? A whole drive, a whole user folder, AppData, Program Files or Windows is refused; Documents, Desktop
+  // and the like, or a cloud drive's top folder, need the owner's yes first (opt.sure). A plugged-in drive the owner asked to see
+  // (opt.usb) is shown as it is: that is the whole drive on purpose, only while it is connected, and never remembered.
+  if (!(opt && opt.usb)) {
+    const c = choiceOf(root, 'location');
+    if (c.level === 'refuse') throw Object.assign(new Error(c.text), { extra: { refused: true, path: c.path, kind: c.kind } });
+    if (c.level === 'warn' && !(opt && opt.sure)) throw Object.assign(new Error(c.warn.text), { extra: { warn: { ...c.warn, path: c.path, kind: c.kind } } });
+  }
   const st = await fsp.stat(root).catch(() => null);
   if (!st || !st.isDirectory()) throw new Error('That folder could not be opened.');
   if (within(root, ROOT)) throw new Error('That folder is already inside your home library.');
@@ -1563,7 +1630,7 @@ async function noticesText() {
 }
 
 // things that open a window on this computer, or handle its secret key, are not offered to a paired phone
-const PC_ONLY = new Set(['/api/reveal', '/api/open', '/api/dictate', '/api/ai/key', '/api/update/start', '/api/fs/import', '/api/feedback/mail', '/api/website']);   // import takes full paths on this computer; a phone opens its own mail app
+const PC_ONLY = new Set(['/api/reveal', '/api/open', '/api/dictate', '/api/ai/key', '/api/update/start', '/api/fs/import', '/api/feedback/mail', '/api/website', '/api/home/choose']);   // import takes full paths on this computer; a phone opens its own mail app
 // "Give feedback": hands a ready-written message to this computer's own email program. Nothing is sent by the app — the owner
 // reads it there and presses Send. It can only ever be addressed to the feedback address the program was built with.
 function mailFeedback(body) {
@@ -1641,7 +1708,7 @@ async function handle(req, res, remote) {
       }
       if (route === '/api/scan') {
         let sc;
-        try { sc = await freshScan(); }
+        try { sc = await freshScan(u.searchParams.get('again') === '1'); }
         catch (e) { return sendJSON(res, 503, { error: 'Could not open ' + ROOT + ' (' + (e.code || e.message) + '). Is the drive connected, and is its sync app running and signed in?' }); }
         return sendJSON(res, 200, payload(visible(sc)));
       }
@@ -1651,7 +1718,7 @@ async function handle(req, res, remote) {
       }
       if (route === '/api/status') {
         const since = +u.searchParams.get('since') || 0;
-        return sendJSON(res, 200, { seq, sig: lastScan && visible(lastScan).sig, pending: pendingCount(), bg, review: buildReview().length, ai: ai.rev() + metaRev, events: events.filter(e => e.seq > since) });
+        return sendJSON(res, 200, { seq, sig: lastScan && visible(lastScan).sig, scan: { on: scanStat.on, seen: scanStat.seen, idle: scanStat.on ? Date.now() - scanStat.at : 0 }, pending: pendingCount(), bg, review: buildReview().length, ai: ai.rev() + metaRev, events: events.filter(e => e.seq > since) });
       }
       if (route === '/api/review') refreshState();
       if (route === '/api/review') return sendJSON(res, 200, { items: buildReview(), bg, history: state.history, trash: TRASH, dismissed: state.dismissed.length + ai.stays() });
@@ -1670,7 +1737,7 @@ async function handle(req, res, remote) {
         } catch { res.writeHead(404); return res.end('not found'); }
       }
       if (route === '/api/phone') return sendJSON(res, 200, phone.state());
-      if (route === '/api/about') return sendJSON(res, 200, { version: VERSION, outdated: OUTDATED ? { theirs: lastUsed.version, mine: VERSION } : null, update: hooks.updateInfo ? hooks.updateInfo() : null, canUpdate: !remote && !!hooks.update, brand: brandOf(), system: SYSTEM, appdir: APPDIR, returning: !remote && hooks.returning ? !!hooks.returning() : false });
+      if (route === '/api/about') return sendJSON(res, 200, { version: VERSION, outdated: OUTDATED ? { theirs: lastUsed.version, mine: VERSION } : null, update: hooks.updateInfo ? hooks.updateInfo() : null, canUpdate: !remote && !!hooks.update, brand: brandOf(), system: SYSTEM, appdir: APPDIR, returning: !remote && hooks.returning ? !!hooks.returning() : false, broad: remote ? [] : broadNotes(), canChooseHome: !remote && !!hooks.chooseHome });
       if (route === '/api/notices') return sendJSON(res, 200, { text: await noticesText() });
       if (route === '/api/licence') return sendJSON(res, 200, { text: await licenceText() });
       { const r = await desk.handle(req, route, {}, remote); if (r) return sendJSON(res, 200, r); }
@@ -1757,13 +1824,14 @@ async function handle(req, res, remote) {
         if (route === '/api/locations/add') {
           let dir = typeof body.root === 'string' ? body.root : '';
           if (!dir) { if (remote || !hooks.pickFolder) throw new Error('Choose a folder on this computer.'); dir = await hooks.pickFolder(); if (!dir) return sendJSON(res, 200, { ok: true, cancelled: true }); }
-          const l = await addLocation(dir);
+          const l = await addLocation(dir, { sure: body.sure === true });   // sure: the owner has answered the "use all of it?" question
           return sendJSON(res, 200, { ok: true, name: l.name, locs: locList(visible(lastScan)) });
         }
         if (route === '/api/locations/remove') { await removeLocation(body.name); return sendJSON(res, 200, { ok: true, locs: locList(visible(lastScan)) }); }
         if (route === '/api/locations/check') return sendJSON(res, 200, { ok: true, ...(await onlineOnly(body.name)) });
         if (route === '/api/feedback/mail') { await mailFeedback(body); return sendJSON(res, 200, { ok: true }); }
         if (route === '/api/website') { openWebsite(); return sendJSON(res, 200, { ok: true }); }
+        if (route === '/api/home/choose') { if (!hooks.chooseHome) throw new Error('The home folder is chosen in the program on the computer: File > Choose home folder.'); hooks.chooseHome(); return sendJSON(res, 200, { ok: true }); }
         if (route === '/api/dictate') { if (!hooks.dictate) throw new Error('Press Win+H to dictate.'); hooks.dictate(); return sendJSON(res, 200, { ok: true }); }
         if (route === '/api/undo-many') {   // newest first, one rescan at the end
           let n = 0, why = '';
@@ -1789,7 +1857,7 @@ async function handle(req, res, remote) {
           }
           return sendJSON(res, 200, { ok: true });
         }
-      } catch (e) { return sendJSON(res, 409, { error: e.message }); }
+      } catch (e) { return sendJSON(res, 409, { error: e.message, ...(e && e.extra) }); }   // extra: what the window needs to ask its question (a folder too broad to add)
     }
     res.writeHead(404); res.end('not found');
   } catch (e) {
