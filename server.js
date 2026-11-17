@@ -483,7 +483,11 @@ const tag = f => { const ext = extOf(f.p); f.k = kindOf(ext); if (MODEL.has(ext)
 const sigOf = (files, dirs) => sha(files.map(f => f.p + '|' + f.s + '|' + f.m).join('\n') + '\n#' + dirs.join('\n'));
 { // start from the saved index so the window fills instantly; a real scan follows and only changes are applied
   const ix = readJSON('index.json', null);
-  if (ix && Array.isArray(ix.files) && Array.isArray(ix.dirs)) { ix.files.forEach(tag); seenAttach(ix.files); lastScan = { files: ix.files, dirs: ix.dirs, at: ix.at, ms: 0, sig: ix.sig }; }
+  if (ix && Array.isArray(ix.files) && Array.isArray(ix.dirs)) { ix.files.forEach(tag); seenAttach(ix.files); lastScan = { files: ix.files, dirs: ix.dirs, at: ix.at, ms: 0, sig: 'saved:' + ix.sig }; }
+  // "saved:": the saved index holds the home library only, but its signature was worked out over everything, other locations
+  // included. Kept as it was, the first real scan after a start came out with the same signature whenever nothing had changed,
+  // so a window that had already filled from the saved index was never told to fetch again, and every other location showed
+  // as empty until Rescan. Marked, the first real scan always counts as a change.
 }
 
 // ---------- holding folders left behind by an unpack that was cut short (a crash, the power going) ----------
