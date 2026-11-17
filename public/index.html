@@ -3023,6 +3023,9 @@ PG.shortcuts = SHORTCUTS;
 // build being made now: it is shown under the number the program reports, as long as that is newer than every numbered entry.
 // When a release is cut, give it its number and start a new '' entry for the next one.
 const WHATSNEW = [
+  { v: '2.1.6', title: 'A tidier View menu', items: [
+    'The developer tools and Reload are no longer in the View menu. They were left over from building the program. F5 still rescans your folders.',
+  ] },
   { v: '2.1.5', title: 'A warning before a whole drive or user folder is chosen', items: [
     'A whole drive, your whole user folder, and the folders that belong to Windows and your other programs can no longer be chosen as your home folder or added as a location. You are asked to choose the folder your 3D files are in instead.',
     'Choosing all of Documents, Desktop, Pictures, Music or Videos, or the top folder of a cloud drive, now asks first and suggests a folder just for your 3D files, such as Documents\\3D Prints. Adding Downloads as a location works as before.',

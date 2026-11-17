@@ -9,6 +9,9 @@ const fs = require('fs');
 const brand = require('./brand.js');
 const folders = require('./folders.js');   // is a chosen folder too broad (a whole drive, a whole user folder, Documents …)?
 const NAME = brand.name;
+// The developer tools and Reload are for finding faults, not for everyday use, so the released program neither shows them in
+// the View menu nor lets the window open them. Starting the program with --devtools brings both back for that run.
+const DEVTOOLS = app.commandLine.hasSwitch('devtools') || !app.isPackaged;
 app.setName(NAME);   // the settings folder is %APPDATA%\<name>, whether installed or run from source — except:
 // THE SETTINGS FOLDER OF AN INSTALL MADE UNDER AN EARLIER NAME IS KEPT, IN PLACE. If %APPDATA%\<a former name> is there, it
 // goes on being the settings folder: the home-folder choice, slicers, paired phones, other locations, window size — and the
@@ -372,7 +375,7 @@ function buildMenu(root) {
         { label: 'Dark', type: 'radio', checked: theme === 'dark', click: () => setTheme('dark') },
       ] },
       { type: 'separator' }, { role: 'zoomIn' }, { role: 'zoomOut' }, { role: 'resetZoom' }, { type: 'separator' },
-      { role: 'togglefullscreen' }, { role: 'reload' }, { role: 'toggleDevTools' },
+      { role: 'togglefullscreen' }, ...(DEVTOOLS ? [{ role: 'reload' }, { role: 'toggleDevTools' }] : []),
     ] },
     // Help: the first group opens windows that belong to the page (asked for through pageOpen, which looks before it calls)
     { label: 'Help', submenu: [
@@ -475,7 +478,7 @@ else {
     win = new BrowserWindow({
       width: (cfg.win && cfg.win.w) || 1500, height: (cfg.win && cfg.win.h) || 950, minWidth: 720, minHeight: 480,
       title: NAME, icon: path.join(__dirname, 'icon.png'), backgroundColor: nativeTheme.shouldUseDarkColors ? '#0b1924' : '#f2f5f7', show: false,
-      webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, preload: path.join(__dirname, 'preload.js') },
+      webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, devTools: DEVTOOLS, preload: path.join(__dirname, 'preload.js') },
     });
     if (cfg.win && cfg.win.max) win.maximize();
     win.once('ready-to-show', () => win.show());
