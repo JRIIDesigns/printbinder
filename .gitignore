@@ -1,0 +1,12 @@
+# installed packages and build output (recreated with: npm install, npm run dist)
+node_modules/
+dist/
+# scratch output
+brand/result.json
+*.log
+*.tmp
+# never commit keys or local settings
+.env
+*.key
+claude-key.*
+dist-test/

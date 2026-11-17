@@ -1,0 +1,30 @@
+{
+  "name": "print-gallery",
+  "productName": "PrintBinder",
+  "version": "2.1.3",
+  "private": true,
+  "license": "MIT",
+  "description": "PrintBinder: browse and organise a 3D printing library",
+  "author": "JRII Designs",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "notices": "node scripts/make-notices.js",
+    "art": "electron scripts/make-installer-art.js",
+    "dist": "node scripts/make-notices.js && electron-builder --win nsis --config build/builder.js && node scripts/release-files.js",
+    "dist:test": "node scripts/make-notices.js && electron-builder --win nsis --config build/test-variant.js --publish never"
+  },
+  "dependencies": {
+    "heic-decode": "^2.0.0",
+    "occt-import-js": "^0.0.23",
+    "qrcode-generator": "^2.0.4",
+    "three": "^0.187.0"
+  },
+  "build": {
+    "extends": "./build/builder.js"
+  },
+  "devDependencies": {
+    "electron": "^45.3.2",
+    "electron-builder": "^26.18.0"
+  }
+}
