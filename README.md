@@ -61,6 +61,7 @@ Requirements: Windows 10 or 11, 64-bit.
 - **Zip files.** A zip shows as a package with a count of the 3D files inside. Open it to see its contents with previews without unpacking anything. Take out the files you choose (they keep the folders they have inside the zip) or unpack it all into a folder beside it. Every file taken out is checked against the zip's own checksum, and unpacking can be undone.
 - **Send to slicer.** Set up your slicers once (PrintBinder finds the common ones) and send a model to any of them.
 - **Other locations.** Show Downloads, another drive or a cloud folder beside the home library and bring their files home.
+- **Find models online.** A second window for model sites (Printables, MakerWorld, Creality Cloud, Thingiverse, or any site you type in and save). A model you download there lands in the unsorted folder of your library; nothing downloaded is opened or run, and only 3D files, zips, pictures and instructions are accepted. The window is walled off from the rest of the program.
 - **USB drives.** Plugging one in offers to copy or move its 3D files into the library.
 - **Hidden folders.** Leave a folder out of the gallery, search, Review and everything an assistant is shown.
 - **AI assistants (optional).** Claude, ChatGPT or Gemini, with your own API key.
@@ -81,6 +82,7 @@ A key is entered on the computer itself, stored there encrypted by Windows for y
 
 - **Your files stay on your computer.** PrintBinder has no account and no server of its own. It collects nothing about you or your library and sends no usage figures or crash reports.
 - **AI features** send something only if you entered a key, and only when you press a button or send a message. The request goes straight from your computer to the company whose key you entered. It can hold preview pictures, file and folder names, descriptions and tags, facts read from your files, and what you type. Model files are never sent. Hidden folders and the contents of zip files are never shown or sent.
+- **Find models online** is a web browser in a window of its own, and it talks to the internet only if you open it. A site you visit there sees what any website sees and can keep cookies and a sign-in, which stay on your computer until you press Clear sign-ins. Its pages cannot see your library, your files or your AI keys, and PrintBinder keeps no record of the pages you visit.
 - **Looking for an update** asks the place the releases are published whether there is a newer version. The request says nothing about you or your library.
 - **Phone access** is off until you switch it on. It works inside your home network only and is **not encrypted**, so use it only on a network you trust, never on public Wi-Fi. Only devices you paired with a one-time code can connect.
 

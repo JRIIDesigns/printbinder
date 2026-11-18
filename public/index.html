@@ -317,8 +317,9 @@ body.remote .pc{display:none!important}
 #prog .box{width:min(420px,92vw)} #prog .bar{height:8px;border-radius:5px;background:var(--tile);overflow:hidden;margin:4px 0 10px} #prog .bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .25s}
 #prog .pf{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin:0;min-height:1.3em}
 #drawerbtn,#shade,.stepper{display:none}
-#phonebtn{display:flex;align-items:center;gap:6px}
-#phonebtn svg{width:14px;height:14px;fill:currentColor;display:block}
+#phonebtn,#findbtn{display:flex;align-items:center;gap:6px}
+#phonebtn svg,#findbtn svg{width:14px;height:14px;fill:currentColor;display:block}
+#findbtn[hidden]{display:none}
 .more{display:none;place-items:center;flex:none;border:0;padding:0;border-radius:50%;width:28px;height:28px;font-size:17px;font-weight:700;line-height:1;background:none;color:var(--dim)}
 .more:hover{background:var(--tile);color:var(--text)}
 .card .more{position:absolute;right:6px;bottom:6px;background:rgba(15,20,28,.6);color:#fff}
@@ -363,7 +364,7 @@ body.touch .stepper{display:flex} body.touch .keys{display:none}
   .tabs{margin-right:auto} .tabs button{padding:5px 10px}
   #aibtn{font-size:0;gap:0;padding:8px 10px} #aibtn svg{width:18px;height:18px} #aibtn .badge{font-size:12px}
   #rescan{font-size:0;padding:4px 10px} #rescan::before{content:"↻";font-size:18px;line-height:1.2}
-  #phonebtn,#status{display:none}
+  #phonebtn,#findbtn,#status{display:none}
   #q{order:4;flex:1 1 100%;max-width:none}
   .chips{order:5;flex:1 1 0;min-width:0;overflow-x:auto;scrollbar-width:none} .chip{flex:none;white-space:nowrap}
   #sort{order:6;flex:none;max-width:140px} #sortrev{order:7}
@@ -500,6 +501,7 @@ body.touch .helppage .linkb{padding:5px 0} body.touch .helpkeys td:first-child{w
   <button class="btn" id="sortrev" aria-label="Reverse the order" title="Reverse the order">↓</button>
   <span id="status">Loading…</span>
   <button class="btn" id="aibtn" title="Describe, sort and ask Claude about your library (Ctrl+K)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l2.2 6.6L21 11l-6.8 2.4L12 20l-2.2-6.6L3 11l6.8-2.4z"/></svg><span id="ainame">AI assistant</span><span class="badge" id="aibadge"></span></button>
+  <button class="btn pc" id="findbtn" hidden title="Browse model sites and download straight into your library (Ctrl+B)"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9s1.3-6.4 3.8-9z"/></svg>Find models</button>
   <button class="btn pc" id="phonebtn" title="Use PrintBinder from your phone on the home Wi-Fi (home network only, not encrypted)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 2h8a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm0 3v13h8V5zm4 14a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"/></svg>Phone</button>
   <button class="btn" id="rescan" title="Check the folder again now">Rescan</button>
 </header>
@@ -3023,6 +3025,11 @@ PG.shortcuts = SHORTCUTS;
 // build being made now: it is shown under the number the program reports, as long as that is newer than every numbered entry.
 // When a release is cut, give it its number and start a new '' entry for the next one.
 const WHATSNEW = [
+  { v: '2.2.0', title: 'Find models online', items: [
+    'New: <b>Find models</b> in the top bar (or File > Find models online, Ctrl+B) opens a window for model sites. Printables, MakerWorld, Creality Cloud and Thingiverse are on its start page; any other site can be typed in, and <b>Save site</b> keeps it there.',
+    'A model you download in that window goes straight into the unsorted folder of your library (<code>Unsorted</code>, made for you if there is none), where Review can suggest a place for it. Nothing downloaded is opened or run, and anything that is not a 3D file, a zip, a picture or instructions is refused.',
+    'That window is kept apart from the rest of the program: its pages cannot see your library, your files or your AI keys. The sites you visit in it see you as any website does and keep their own cookies; <b>Clear sign-ins</b> forgets them. Help > Privacy says more.',
+  ] },
   { v: '2.1.6', title: 'A tidier View menu', items: [
     'The developer tools and Reload are no longer in the View menu. They were left over from building the program. F5 still rescans your folders.',
   ] },
@@ -3136,6 +3143,9 @@ const GUIDE = [
     <p>Each AI company bills its own key for what its assistant does, and a chat subscription (the ChatGPT, Claude or Gemini apps) does not include this.</p>
     <p>What is sent, and only when you press a button or send a message: preview pictures, file and folder names, descriptions, and facts read from the files. Model files are never sent. <button class="linkb" data-help="privacy">Privacy in full</button></p>`],
   ['slicers', 'Slicers', () => `<p>On the computer, <b>Send to slicer</b> opens a model in your slicer. The first time, the program lists the slicers it finds installed; choose which to keep and which is the default${REMOTE ? '' : ' (<button class="linkb" data-help="do-slicers">Slicers…</button>)'}. With more than one, the small arrow beside the button picks another. A phone cannot start a slicer.</p>`],
+  ['find', 'Find models online', () => `<p>On the computer, <b>Find models</b> in the top bar (or File > Find models online, Ctrl+B) opens a second window for model sites. Its start page has Printables, MakerWorld, Creality Cloud and Thingiverse. Any other site works too: type its address in the bar, and <b>Save site</b> keeps the page you are on for next time.</p>
+    <p>Sign in to a site there if you want to, and press its download button. A 3D file, a zip, a picture or a sheet of instructions is saved into the unsorted folder of your library (a folder called <code>Unsorted</code>, made for you if you have none), and Review suggests where it belongs. Nothing that is downloaded is opened or run, and any other kind of file is refused: use <b>Open in my browser</b> for those.</p>
+    <p>That window is kept apart from the rest of ${esc(APP())}: its pages cannot see your library, your files or your AI keys, and are refused this computer’s own addresses and those of your home network. Sign-ins made there are remembered for that window only, on this computer; <b>Clear sign-ins</b> forgets them. If a site will not sign you in there, <b>Open in my browser</b> sends the page to your usual browser.</p>`],
   ['usb', 'USB drives and zip files', () => `<p>Plug in a USB drive that holds 3D files and a bar at the top offers to <b>Copy</b> or <b>Move</b> them into the library, or just to show the drive. Files the library already has are skipped; a move removes a file from the drive only after its copy has been checked.</p>
     <p>A zip shows as a package with a count of the 3D files inside. Open it to see its contents with previews — looking unpacks nothing. Take out the files you choose, or unpack everything into a folder beside it; each file is checked against the zip’s own checksum, and unpacking can be undone. What is inside a zip is not part of the library, and is never sent to an AI, until it is taken out.</p>`],
   ['phone', 'Phone access', () => `<p><b>Home network only, not encrypted.</b> Optional, and off until you switch it on${REMOTE ? ' on the computer' : ' (<button class="linkb" data-help="do-phone">Phone…</button>)'}. A phone or tablet on the same home network pairs once with a code shown on the computer, and then uses the same library and the same Review list in its browser. The computer has to be on with ${esc(APP())} running.</p>
@@ -3151,9 +3161,10 @@ const GUIDE = [
     <p>Uninstalling the program leaves your library and its data folder alone.</p>`],
 ];
 const privacyHTML = () => `<h3>Privacy</h3>
-  <p><b>Your files stay on your computer.</b> ${esc(APP())} has no account, no sign-in and no server of its own. It collects nothing about you or your library and sends no usage figures, crash reports or telemetry of any kind.</p>
+  <p><b>Your files stay on your computer.</b> ${esc(APP())} has no account, no sign-in of its own and no server of its own. It collects nothing about you or your library and sends no usage figures, crash reports or telemetry of any kind.</p>
   <h4>What can leave the computer, and when</h4>
   <ul><li><b>AI features — only if you entered a key, and only when you press a button or send a message.</b> The request goes straight from your computer to the company whose key you entered (Anthropic for Claude, OpenAI for ChatGPT, Google for Gemini). It can hold preview pictures, file and folder names, descriptions and tags, facts read from your files (a listing title, part names, measured size, printer and material) and what you type to the assistant. <b>Model files themselves are never sent.</b> Hidden folders and the contents of zip files are never shown or sent. What that company does with what it receives is set by its own terms, not by this program.</li>
+  <li><b>Find models online — only if you open it, and only the sites you visit.</b> That window is a web browser. A site you open in it sees what any website sees (your internet address, and what you do on that site) and can keep cookies and a sign-in, which stay on this computer in this Windows user’s settings folder until you press <b>Clear sign-ins</b>. Nothing from your library is sent: those pages cannot see your files, your folders or your AI keys. ${esc(APP())} keeps no record of the pages you visit. What a site does with what it receives is set by its own terms.</li>
   <li><b>Looking for an update.</b> When the program starts, and when you choose Check for updates, it asks the place its releases are published whether there is a newer version. The request says nothing about you or your library; like any web request it comes from your internet address.</li>
   <li><b>Feedback — only if you send it.</b> “Give feedback” opens your own email program with a message you can read and change. Nothing is sent until you press Send there.</li></ul>
   <h4>Phone access — home network only, not encrypted</h4>
@@ -3162,7 +3173,7 @@ const privacyHTML = () => `<h3>Privacy</h3>
   <p>A key is stored on the computer it was entered on, in this Windows user’s settings folder, encrypted by Windows. It is never put in the library folder, never shown again, never given to a paired phone, and sent only to the company it belongs to.</p>
   <h4>What is stored where</h4>
   <p>Previews, descriptions, tags, the Review list and the history live in a data folder inside your library, so they travel with it — including to any cloud service you keep the library in. Settings of one computer live in that Windows user’s application-data folder.</p>
-  <p class="helpfine">Claude, ChatGPT and Gemini are products of Anthropic, OpenAI and Google. Slicer names belong to their makers. ${esc(APP())} is not affiliated with or endorsed by any of them.</p>`;
+  <p class="helpfine">Claude, ChatGPT and Gemini are products of Anthropic, OpenAI and Google. Slicer names and the names of model sites belong to their makers. ${esc(APP())} is not affiliated with or endorsed by any of them.</p>`;
 const welcomeHTML = () => `<h3>Welcome to ${esc(APP())}</h3>
   <p>It shows every 3D-printing file in your library with a preview, opens models in 3D, and helps you bring files scattered over folders and drives into one tidy place.</p>
   <ul><li><b>Nothing moves until you say so.</b> Suggestions wait in Review for your approval.</li><li><b>Remove never deletes.</b> A removed file goes to a folder inside your library.</li><li><b>Everything can be undone.</b></li><li><b>AI is optional</b> — and nothing is sent to an AI service unless you press a button.</li></ul>
@@ -3315,6 +3326,8 @@ loadSlicers();
 pollDesk(); setInterval(pollDesk, 5000);
 $('#shade').addEventListener('click', () => { hideMenu(); document.body.classList.remove('drawer'); });
 $('#phonebtn').addEventListener('click', () => openPhone());
+// Find models online is a window of the desktop program: the button is there only where that window can be opened
+if (!REMOTE && window.pgDesk && pgDesk.findModels) { $('#findbtn').hidden = false; $('#findbtn').addEventListener('click', () => pgDesk.findModels()); }
 // the address bar: back, forward, up, the path as parts to click, and the menus for how the folder is shown
 $('#navback').addEventListener('click', () => navGo(-1));
 $('#navfwd').addEventListener('click', () => navGo(1));

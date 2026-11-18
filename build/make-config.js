@@ -93,7 +93,7 @@ module.exports = function makeConfig(brand, opt = {}) {
       name: pkgName, productName: brand.name, description: brand.description, author: { name: brand.publisherShown },
       ...(brand.website ? { homepage: brand.website } : {}), ...(opt.version ? { version: opt.version } : {}), ...(opt.brandOverride ? { brandOverride: opt.brandOverride } : {}),
     },
-    files: ['main.js', 'preload.js', 'brand.js', 'folders.js', 'server.js', 'ai.js', 'providers/**', 'phone.js', 'update.js', 'desk.js', 'worker.js', 'zip.js', 'public/**', 'icon.png', 'package.json', 'LICENSE', 'THIRD-PARTY-NOTICES.txt', ...libraryFiles()],
+    files: ['main.js', 'preload.js', 'brand.js', 'folders.js', 'server.js', 'ai.js', 'providers/**', 'phone.js', 'update.js', 'desk.js', 'browser.js', 'browser-preload.js', 'browser.html', 'worker.js', 'zip.js', 'public/**', 'icon.png', 'package.json', 'LICENSE', 'THIRD-PARTY-NOTICES.txt', ...libraryFiles()],
     directories: { output: out, buildResources: 'build' },
     win: {
       target: ['nsis'],

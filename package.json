@@ -1,7 +1,7 @@
 {
   "name": "print-gallery",
   "productName": "PrintBinder",
-  "version": "2.1.6",
+  "version": "2.2.0",
   "private": true,
   "license": "MIT",
   "description": "PrintBinder: browse and organise a 3D printing library",
@@ -24,7 +24,7 @@
     "extends": "./build/builder.js"
   },
   "devDependencies": {
-    "electron": "^45.3.2",
+    "electron": "^45.3.4",
     "electron-builder": "^26.18.0"
   }
 }

@@ -9,6 +9,8 @@ const fs = require('fs');
 const brand = require('./brand.js');
 const folders = require('./folders.js');   // is a chosen folder too broad (a whole drive, a whole user folder, Documents …)?
 const NAME = brand.name;
+// File > Find models online: a second window for model sites, walled off from everything else here (browser.js).
+const findModels = require('./browser.js')({ root: () => menuRoot, log: (...a) => { try { if (srv && srv.log) srv.log(...a); } catch {} }, rescan: () => { if (win) win.webContents.executeJavaScript('window.rescanNow && rescanNow()').catch(() => {}); } });
 // The developer tools and Reload are for finding faults, not for everyday use, so the released program neither shows them in
 // the View menu nor lets the window open them. Starting the program with --devtools brings both back for that run.
 const DEVTOOLS = app.commandLine.hasSwitch('devtools') || !app.isPackaged;
@@ -337,6 +339,7 @@ function buildMenu(root) {
       { label: 'Locations…', accelerator: 'CmdOrCtrl+L', click: () => js('openLocations()') },
       { label: 'Phone access…', click: () => js('openPhone()') },
       { label: 'Slicers…', click: () => js('openSlicers()') },
+      { label: 'Find models online…', accelerator: 'CmdOrCtrl+B', click: () => findModels.open() },
       { label: 'Choose home folder…', click: changeRoot },
       { label: 'AI assistant…', accelerator: 'CmdOrCtrl+K', click: () => js('toggleAI(true)') },
       { type: 'separator' }, { role: 'quit' },
@@ -501,6 +504,8 @@ else {
     });
     win.loadURL('http://127.0.0.1:' + port + '/');
     win.webContents.once('did-finish-load', () => { const was = afterUpdate(); if (autoUpdate && !was) { updLog('auto-start'); checkUpdates(true); } });
+    ipcMain.on('pg-find-models', e => { if (win && e.sender === win.webContents) findModels.open(); });   // the button in the gallery's top bar
+    if (!app.isPackaged && process.env.GALLERY_TEST_BROWSER_OPEN === '1') win.once('show', () => setTimeout(() => findModels.open(), 800));   // test hook: the window opens by itself
     if (process.env.GALLERY_TEST_ABOUT === '1') win.once('show', () => setTimeout(() => about(root), 1500));   // test hook: Help > About opens by itself, to be looked at
     // An older copy than the one that last worked on this library: say so before anything else, and only look until updated.
     if (srv.outdated) win.once('show', async () => {

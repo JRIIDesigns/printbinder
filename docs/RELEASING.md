@@ -4,6 +4,12 @@ Every step of a release, in order. The names used here come from `brand.js`; if 
 
 A release has one installer, `PrintBinder-Setup-<version>.exe`. Installs older than 2.1.0 were private copies and no longer exist, so nothing is published under an earlier name. Releases are published in the GitHub project named by `updateRepo` in `brand.js` and, for a library shared between computers, the installer is copied with `latest.json` into the library's `updates` folder.
 
+## 0. The built-in browser means security releases
+
+Since 2.2.0 the program has a window that shows other people's web pages (File > Find models online, `browser.js`). The browser engine comes with Electron, so a security fix to Chromium reaches users only through a new release of this program. When Electron publishes a release that fixes a security fault in Chromium or in Electron itself: update `electron` in `package.json` to the newest release of the same major version, run the tests, and publish a patch release without waiting for other work. Check for one before every release in any case.
+
+Three things in `browser.js` are what keep that window apart from the rest of the program, and no change may weaken them: its pages get no preload and run sandboxed in a session of their own; requests to this computer, to private network addresses and to anything but http and https are refused; and a download is only ever saved, never opened.
+
 ## 1. Before building
 
 1. Set `"version"` in `package.json` (and in both places at the top of `package-lock.json`).
