@@ -10,6 +10,8 @@ Since 2.2.0 the program has a window that shows other people's web pages (File >
 
 Three things in `browser.js` are what keep that window apart from the rest of the program, and no change may weaken them: its pages get no preload and run sandboxed in a session of their own; requests to this computer, to private network addresses and to anything but http and https are refused; and a download is only ever saved, never opened.
 
+Browsing must never make Windows Firewall ask about the program. Chromium opens network sockets for QUIC and for mDNS that do exactly that, so `main.js` switches both off (2.2.1). After an Electron update, check it still holds: copy `distwin-unpacked` to a folder it has never run from, start it, open a few sites in Find models (a video site and a video-call site among them), and confirm that `Get-NetUDPEndpoint` lists nothing for its processes and that no new firewall rule naming the program has appeared.
+
 ## 1. Before building
 
 1. Set `"version"` in `package.json` (and in both places at the top of `package-lock.json`).

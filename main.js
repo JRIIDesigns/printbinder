@@ -14,6 +14,12 @@ const findModels = require('./browser.js')({ root: () => menuRoot, log: (...a) =
 // The developer tools and Reload are for finding faults, not for everyday use, so the released program neither shows them in
 // the View menu nor lets the window open them. Starting the program with --devtools brings both back for that run.
 const DEVTOOLS = app.commandLine.hasSwitch('devtools') || !app.isPackaged;
+// The Find models window browses the web. Two things Chromium does by default open network sockets that make Windows Firewall
+// ask whether the program may be reached from the network, which browsing never needs: its newer transport (QUIC), and the
+// local-network name service it starts when a page sets up a video-call connection (mDNS). Both are switched off: pages load
+// over the ordinary transport, and browser.js already keeps such connections off the local network.
+app.commandLine.appendSwitch('disable-quic');
+app.commandLine.appendSwitch('disable-features', 'WebRtcHideLocalIpsWithMdns');
 app.setName(NAME);   // the settings folder is %APPDATA%\<name>, whether installed or run from source — except:
 // THE SETTINGS FOLDER OF AN INSTALL MADE UNDER AN EARLIER NAME IS KEPT, IN PLACE. If %APPDATA%\<a former name> is there, it
 // goes on being the settings folder: the home-folder choice, slicers, paired phones, other locations, window size — and the

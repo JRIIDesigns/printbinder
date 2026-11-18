@@ -3025,6 +3025,9 @@ PG.shortcuts = SHORTCUTS;
 // build being made now: it is shown under the number the program reports, as long as that is newer than every numbered entry.
 // When a release is cut, give it its number and start a new '' entry for the next one.
 const WHATSNEW = [
+  { v: '2.2.1', title: 'No firewall question from Find models', items: [
+    'Opening a site in Find models could make Windows Firewall ask whether PrintBinder may be reached from the network. Browsing never needs that, and the question no longer appears. If you were asked, either answer was harmless.',
+  ] },
   { v: '2.2.0', title: 'Find models online', items: [
     'New: <b>Find models</b> in the top bar (or File > Find models online, Ctrl+B) opens a window for model sites. Printables, MakerWorld, Creality Cloud and Thingiverse are on its start page; any other site can be typed in, and <b>Save site</b> keeps it there.',
     'A model you download in that window goes straight into the unsorted folder of your library (<code>Unsorted</code>, made for you if there is none), where Review can suggest a place for it. Nothing downloaded is opened or run, and anything that is not a 3D file, a zip, a picture or instructions is refused.',
