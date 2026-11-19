@@ -1,0 +1,88 @@
+# Builds the Windows installer from this repository on a GitHub-hosted machine, so that anyone can see the installer of a
+# release was made from the source here and from nothing else. It runs when a version tag (v1.2.3) is pushed, or by hand.
+#
+# Signing is done by SignPath (https://signpath.io) with a certificate of the SignPath Foundation, once the project has been
+# accepted there. Until the four values below are set, the build stops after uploading the unsigned installer and nothing is
+# signed. A release is still published by a person: this workflow never publishes one.
+#
+#   Repository variables  (Settings > Secrets and variables > Actions > Variables)
+#     SIGNPATH_ORGANIZATION_ID     the organisation's id at SignPath
+#     SIGNPATH_PROJECT_SLUG        the project's short name there, e.g. printbinder
+#     SIGNPATH_SIGNING_POLICY_SLUG the signing policy to use, e.g. release-signing
+#   Repository secret     (… > Secrets)
+#     SIGNPATH_API_TOKEN           a token of a SignPath user allowed to submit signing requests for the project
+name: Release build
+
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build the installer
+    runs-on: windows-latest   # a GitHub-hosted machine: SignPath signs nothing built anywhere else
+    timeout-minutes: 45
+    steps:
+      - name: Get the source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install exactly what package-lock.json names
+        run: npm ci
+
+      - name: The tag and the version in package.json must agree
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          want="${GITHUB_REF_NAME#v}"
+          have="$(node -p "require('./package.json').version")"
+          if [ "$want" != "$have" ]; then echo "The tag says $want but package.json says $have."; exit 1; fi
+
+      - name: Build the installer
+        run: npm run dist
+
+      - name: Say what was built
+        shell: bash
+        run: |
+          cd dist
+          ls -l PrintBinder-Setup-*.exe latest.json
+          sha256sum PrintBinder-Setup-*.exe
+
+      - name: Upload the unsigned installer
+        id: unsigned
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-unsigned
+          path: dist/PrintBinder-Setup-*.exe
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Ask SignPath to sign it (waits for a person to approve the request there)
+        if: vars.SIGNPATH_ORGANIZATION_ID != ''
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed
+
+      - name: Upload the signed installer
+        if: vars.SIGNPATH_ORGANIZATION_ID != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-signed
+          path: signed/**/PrintBinder-Setup-*.exe
+          if-no-files-found: error
+          retention-days: 30
