@@ -33,6 +33,9 @@ button.ic{width:34px;padding:5px 0;font-size:15px}
 #sites2 .mine:hover{border-color:var(--greend)}
 #sites2 b,#sites2 span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap} #sites2 b{font-size:16px;margin-bottom:2px} #sites2 span{color:var(--dim);font-size:12.5px}
 #sites2 .x{position:absolute;right:6px;top:6px;border:0;padding:2px 7px;color:var(--dim);font-size:15px;border-radius:5px} #sites2 .x:hover{color:var(--bad);background:var(--bg)}
+#have{color:var(--good);font-weight:600;max-width:38%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap} #have[hidden],#dls[hidden]{display:none}
+#dl{display:none;max-width:60rem;margin:0 0 22px} #dl .row{display:flex;gap:10px;align-items:center;padding:8px 12px;background:var(--panel);border:1px solid var(--line);border-radius:8px;margin-bottom:6px}
+#dl .row b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap} #dl .row span{color:var(--dim);font-size:12.5px;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -48,6 +51,8 @@ button.ic{width:34px;padding:5px 0;font-size:15px}
   </div>
   <div id="info">
     <span id="note">Downloads of 3D files, zips and pictures go into the unsorted folder of your library. Nothing is opened or run.</span>
+    <button id="have" hidden title="Open it in the gallery"></button>
+    <button id="dls" hidden title="What you have downloaded since PrintBinder was started"></button>
     <button id="clear" title="Forget the sign-ins, cookies and saved pages of this window">Clear sign-ins</button>
   </div>
 </div>
@@ -60,6 +65,7 @@ button.ic{width:34px;padding:5px 0;font-size:15px}
     <button data-u="https://www.crealitycloud.com/"><b>Creality Cloud</b><span>crealitycloud.com</span></button>
     <button data-u="https://www.thingiverse.com/"><b>Thingiverse</b><span>thingiverse.com</span></button>
   </div>
+  <div id="dl"><h2>Downloaded since PrintBinder was started</h2><div id="dllist"></div></div>
   <div id="mine"><h2>Your saved sites</h2><div id="sites2"></div></div>
   <ul>
     <li>Any site works: type its address in the bar at the top. <b>&#9734; Save site</b> keeps the page you are on here for next time.</li>
@@ -99,6 +105,15 @@ B.onSites(list => {
   }
 });
 B.nav('sites');
+B.onHave(h => { const b = $('#have'); b.hidden = !h.n; b.textContent = h.n ? 'In your library already: ' + h.name + (h.n > 1 ? ' and ' + (h.n - 1) + ' more' : '') : ''; });
+$('#have').addEventListener('click', () => B.nav('showhave'));
+$('#dls').addEventListener('click', () => B.nav('home'));
+B.onDownloads(list => {
+  const box = $('#dllist'); box.textContent = ''; $('#dl').style.display = list.length ? 'block' : 'none';
+  $('#dls').hidden = !list.length; $('#dls').textContent = 'Downloads (' + list.length + ')';
+  list.forEach((d, i) => { const r = document.createElement('div'); r.className = 'row'; const b = document.createElement('b'); b.textContent = d.name; const s = document.createElement('span'); s.textContent = 'in ' + d.where;
+    const x = document.createElement('button'); x.textContent = 'Show in gallery'; x.addEventListener('click', () => B.nav('showdl', i)); r.append(b, s, x); box.append(r); });
+});
 B.onNote(n => { const e = $('#note'); e.textContent = n.text; e.className = n.bad ? 'bad' : n.good ? 'good' : ''; });
 </script>
 </body>

@@ -762,7 +762,7 @@ function prep(f) {
   f.d = dirOf(f.p); f.n = baseOf(f.p);
   const x = /\.([^.]+)$/.exec(f.n);
   f.x = x ? x[1].toLowerCase() : '';
-  f.lc = (f.p + (f.ds ? ' ' + f.ds + ' ' + (f.g || []).join(' ') : '') + (f.pr ? ' ' + f.pr + ' ' + (f.pf || '') : '') + (f.mt ? ' ' + f.mt : '') + (f.ti ? ' ' + f.ti : '') + (f.by ? ' ' + f.by : '') + (f.ab ? ' ' + f.ab : '') + (f.pn ? ' ' + f.pn.join(' ') : '') + (f.og ? ' ' + f.og.join(' ') : '')).toLowerCase();
+  f.lc = (f.p + (f.ds ? ' ' + f.ds + ' ' + (f.g || []).join(' ') : '') + (f.pr ? ' ' + f.pr + ' ' + (f.pf || '') : '') + (f.mt ? ' ' + f.mt : '') + (f.ti ? ' ' + f.ti : '') + (f.by ? ' ' + f.by : '') + (f.ab ? ' ' + f.ab : '') + (f.pn ? ' ' + f.pn.join(' ') : '') + (f.og ? ' ' + f.og.join(' ') : '') + (f.stg ? ' ' + f.stg.join(' ') : '') + (f.sw ? ' ' + f.sw : '')).toLowerCase();
   return f;
 }
 // A zip is shown as a package, with what the app found inside it: how many 3D files, or how many files of any kind.
@@ -1730,7 +1730,7 @@ function showProps(items) {
     title = f.n;
     rows = [['Type', typeName(f)], ['Size', size(f.s)], ['Modified', when(f.m)], ['Folder', nice(f.d) || 'Top folder'],
       f.sz && ['Real size', f.sz.join(' × ') + ' mm' + (f.no > 1 ? ` (largest of ${f.no} objects)` : '')], f.pn && ['Parts', (f.pn.length + (f.pm || 0)) + ' — ' + partNames(f)],
-      f.pr && ['Printer', f.pr + (f.pf ? ' (' + f.pf + ')' : '')], f.mt && ['Material', f.mt], f.pt && ['Print time', f.pt], f.ti && ['Listed as', f.ti + (f.by ? ' by ' + f.by : '')], !REMOTE && ['Full path', absPath(f.p)]];
+      f.pr && ['Printer', f.pr + (f.pf ? ' (' + f.pf + ')' : '')], f.mt && ['Material', f.mt], f.pt && ['Print time', f.pt], f.ti && ['Listed as', f.ti + (f.by ? ' by ' + f.by : '')], f.sp && ['Downloaded from', f.sp], f.lic && ['Licence stated on its page', f.lic], !REMOTE && ['Full path', absPath(f.p)]];
   } else if (one !== null) {
     const fs = under(one), subs = S.dirs.filter(x => one ? x.startsWith(one + '/') : x[0] !== ':').length;
     title = one ? nice(baseOf(one)) : 'Top folder';
@@ -1876,7 +1876,7 @@ function showDetail(i) {
   else big = `<div class="ph">${esc(f.x.toUpperCase())}<small>${f.t === 'wait' ? 'preview is still being made' : 'no preview available'}</small></div>`;
   $('#dlg').innerHTML = `<button class="x" data-close aria-label="Close">×</button><div class="dl"><div class="big">${big}</div><div class="side">
     <h3 data-a="rename" title="Click to rename">${esc(f.n)}</h3>
-    <dl><dt>Folder</dt><dd>${esc(nice(f.d) || '(top folder)')}</dd><dt>Type</dt><dd>${esc(f.x.toUpperCase())}</dd><dt>File size</dt><dd>${fmtSize(f.s)}</dd>${f.sz ? `<dt title="Measured from the model itself, as it sits on the plate: width × depth × height">Real size</dt><dd>${f.sz.map(v => esc(String(v))).join(' × ')} mm${f.no > 1 ? ` <small>(largest of ${f.no} objects)</small>` : ''}</dd>` : ''}<dt>Modified</dt><dd>${new Date(f.m).toLocaleString()}</dd>${f.pr ? `<dt title="The printer this file was last saved or sliced for">Printer</dt><dd>${esc(f.pr)}${f.pf ? ` <small>(${esc(f.pf)})</small>` : ''}</dd>` : ''}${f.col ? `<dt title="The main colour, recorded where a file’s colour is real">Colour</dt><dd><i class="swatch" style="background:${COLOUR_CSS[f.col] || 'none'}"></i>${esc(f.col)}</dd>` : ''}${f.a ? `<dt title="When the program first saw this file">Added</dt><dd>${fmtDate(f.a)}</dd>` : ''}${f.mt ? `<dt>Material</dt><dd>${esc(f.mt)}</dd>` : ''}${f.pt ? `<dt>Print time</dt><dd>${esc(f.pt)}</dd>` : ''}${f.ti ? `<dt title="The title the designer gave this model on the download site, read from inside the file">Listed as</dt><dd>${esc(f.ti)}${f.by ? ` <small>by ${esc(f.by)}</small>` : ''}</dd>` : ''}${f.pn ? `<dt title="The names of the pieces inside this file">Parts</dt><dd>${esc(partNames(f))}</dd>` : ''}${f.og ? `<dt title="The name of the file this one was made from in the slicer">Was called</dt><dd>${esc(f.og.join(', '))}</dd>` : ''}</dl>${f.ab ? `<p class="listing" title="${esc(f.ab)}"><b>From the listing:</b> ${esc(f.ab.length > 320 ? f.ab.slice(0, 320) + '…' : f.ab)}</p>` : ''}
+    <dl><dt>Folder</dt><dd>${esc(nice(f.d) || '(top folder)')}</dd><dt>Type</dt><dd>${esc(f.x.toUpperCase())}</dd><dt>File size</dt><dd>${fmtSize(f.s)}</dd>${f.sz ? `<dt title="Measured from the model itself, as it sits on the plate: width × depth × height">Real size</dt><dd>${f.sz.map(v => esc(String(v))).join(' × ')} mm${f.no > 1 ? ` <small>(largest of ${f.no} objects)</small>` : ''}</dd>` : ''}<dt>Modified</dt><dd>${new Date(f.m).toLocaleString()}</dd>${f.pr ? `<dt title="The printer this file was last saved or sliced for">Printer</dt><dd>${esc(f.pr)}${f.pf ? ` <small>(${esc(f.pf)})</small>` : ''}</dd>` : ''}${f.col ? `<dt title="The main colour, recorded where a file’s colour is real">Colour</dt><dd><i class="swatch" style="background:${COLOUR_CSS[f.col] || 'none'}"></i>${esc(f.col)}</dd>` : ''}${f.a ? `<dt title="When the program first saw this file">Added</dt><dd>${fmtDate(f.a)}</dd>` : ''}${f.mt ? `<dt>Material</dt><dd>${esc(f.mt)}</dd>` : ''}${f.pt ? `<dt>Print time</dt><dd>${esc(f.pt)}</dd>` : ''}${f.ti ? `<dt title="${f.tw ? 'What the page this file was downloaded from calls it. The file itself does not say.' : 'The title the designer gave this model on the download site, read from inside the file'}">Listed as</dt><dd>${esc(f.ti)}${f.by ? ` <small>by <button class="linkb" data-a="by" title="Show everything you have from this designer">${esc(f.by)}</button></small>` : ''}</dd>` : ''}${f.stg ? `<dt title="The tags on the page this file was downloaded from. Search finds them.">Page tags</dt><dd>${esc(f.stg.join(', '))}</dd>` : ''}${f.lic ? `<dt title="What the page this file was downloaded from says about how it may be used. Read the page itself before you sell prints or share a changed version.">Licence</dt><dd>${esc(f.lic)}${/\bnc\b/i.test(f.lic) ? ' <small>non-commercial</small>' : ''} <small>as its page states</small></dd>` : ''}${f.sp ? `<dt title="${f.si ? 'This file was made from a downloaded one (a slicer project, or a file saved beside it under the same name). This is that file’s page.' : 'The page this file was downloaded from, in Find models'}">Source</dt><dd><button class="linkb" data-a="src" title="${esc(f.sp)}">${esc(f.sw || 'the page it came from')}</button>${f.si ? ' <small>from the file this was made from</small>' : ''}</dd>` : ''}${f.pn ? `<dt title="The names of the pieces inside this file">Parts</dt><dd>${esc(partNames(f))}</dd>` : ''}${f.og ? `<dt title="The name of the file this one was made from in the slicer">Was called</dt><dd>${esc(f.og.join(', '))}</dd>` : ''}</dl>${f.ab ? `<p class="listing" title="${esc(f.ab)}"><b>${f.aw ? 'From the page it came from' : 'From the listing'}:</b> ${esc(f.ab.length > 320 ? f.ab.slice(0, 320) + '…' : f.ab)}</p>` : ''}
     ${descHTML(f)}
     <div class="btns">${isZip(f) ? `<button class="btn primary" data-a="zipin" title="See what is in this zip. Nothing is unpacked by looking.">Look inside</button>${RO() || f.zb ? '' : '<button class="btn" data-a="zipall" title="Unpack everything into a folder named after the zip, beside it">Unpack here</button>'}` : ''}${REMOTE ? '<button class="btn primary" data-a="dl">Download</button>' : ''}${CAN_OUT ? '<span class="dragout" draggable="true" data-out title="Drag this out of the window to copy the file to the desktop, a folder or a slicer">⇱ Drag out</span>' : ''}<button class="btn primary pc" data-a="open">Open</button>${canSlice(f.p) ? sliceBtn() : ''}<button class="btn pc" data-a="show">Show in Explorer</button><button class="btn" data-a="move">Move to…</button><button class="btn" data-a="rename">Rename…</button>${aiOn(AI.st) && !RO() ? `<button class="btn" data-a="aname" title="${AIN()} reads this file’s name, folder, description and facts and suggests a name. Nothing is renamed unless you press Rename.">Ask ${AIN()} for a name…</button>` : ''}<button class="btn pc" data-a="copy">Copy path</button>${f.key && f.t === 'ok' && aiOn(AI.st) && !RO() ? `<span class="split"><button class="btn" data-a="again" title="Send this preview to ${AIND()} once more and replace its description. The one it has now is kept, so it can be put back.">Describe again</button><button class="btn" data-a="againpick" aria-label="Describe with a model you choose" title="Describe with… — send it to a model you choose, this once">▾</button></span>` : ''}<button class="btn danger" data-a="remove">Remove</button></div>
     ${S.shown.length > 1 ? `<div class="stepper"><button class="btn" data-a="prev"${i > 0 ? '' : ' disabled'}>‹ Previous</button><button class="btn" data-a="next"${i < S.shown.length - 1 ? '' : ' disabled'}>Next ›</button></div>` : ''}
@@ -2023,6 +2023,8 @@ $('#dlg').addEventListener('click', async e => {
   try {
     if (a === 'open') { await api('/api/open', { p: f.p }); toast('Opening in its default app…'); }
     else if (a === 'show') await api('/api/reveal', { p: f.p });
+    else if (a === 'by') { if (!f.by) return; $('#dlg').close(); setSearch(f.by); }
+    else if (a === 'src') { if (!f.sp) return; if (!REMOTE && window.pgDesk && pgDesk.findModels) pgDesk.findModels(f.sp); else window.open(f.sp, '_blank', 'noopener'); }
     else if (a === 'copy') { await navigator.clipboard.writeText(absPath(f.p)); toast('Path copied'); }
     else { $('#dlg').close(); if (a === 'move') moveWithPicker([f.p]); else if (a === 'rename') doRename(f.p); else if (a === 'aname') suggestName([f.p]); else doRemove([f.p], false); }
   } catch (err) { toast(err.message); }
@@ -2291,7 +2293,7 @@ const RSEL = new Set();    // ids of the ticked rows; kept while the list is red
 const RFOLD = new Set();   // minimised parts of Review: 'g:<destination folder>' for a group of moves, 's:<type>' for a section
 let lastTick = -1;
 // Who made the suggestions of one kind: the assistant's name when they all came from one, "AI" when from several.
-const whoMade = type => { const ps = [...new Set(reviewOf(type).map(x => x.ai || 'anthropic'))], pv = (AI.st && AI.st.providers) || {}; return ps.length === 1 ? ((pv[ps[0]] || {}).label || 'Claude') : ps.length ? 'AI' : AIN(); };
+const whoMade = type => { const all = [...new Set(reviewOf(type).map(x => x.ai || 'anthropic'))], ps = all.filter(p => p !== 'page'), pv = (AI.st && AI.st.providers) || {}; return all.length && !ps.length ? 'From the download page' : ps.length === 1 && all.length === 1 ? ((pv[ps[0]] || {}).label || 'Claude') : ps.length === 1 ? ((pv[ps[0]] || {}).label || 'Claude') + ' and the download page' : ps.length ? 'AI' : AIN(); };
 const tick = s => `<label class="rck" title="Tick to act on several at once"><input type="checkbox" data-ck${RSEL.has(s.id) ? ' checked' : ''} aria-label="Select this suggestion"></label>`;
 const isMove = s => s.type === 'move' || s.type === 'ai-move';
 function tickRow(ck, range) {
@@ -2426,7 +2428,10 @@ async function condenseFolder(d) {
   try { aiApply(await api('/api/ai/condense', { dir: d })); toggleAI(true); aiPoll(); } catch (e) { toast(e.message); }
 }
 async function loadSlicers() { if (REMOTE) return; try { Object.assign(SL, await api('/api/slicers')); } catch {} }
+const INBOX = { files: [], loc: '', dest: '' };
+const inboxNew = () => { const skip = new Set(LS.get('inboxskip', [])); return INBOX.files.filter(f => !skip.has(f.key) && S.byPath.has(f.p)); };
 async function pollDesk() {
+  if (!REMOTE) { try { Object.assign(INBOX, await api('/api/inbox')); } catch {} }
   try {
     const u = await api('/api/usb'), was = USB.drives.some(d => d.state === 'importing');
     USB.drives = u.drives;
@@ -2442,6 +2447,7 @@ function drawNotes() {
   let h = '';
   if (STALL.on) h += `<div class="note" data-note="stall"><span><b>Still checking your folders…</b> A cloud drive may be slow to answer. ${STALL.first ? `What you see is from the last time ${esc(APP())} ran.` : 'What you see is from the last check.'}</span><button class="btn primary" data-n="stallscan">Rescan</button></div>`;
   { const b = broadNote(); if (b) h += `<div class="note warn" data-note="broad"><span><b>${esc(b.title)}.</b> ${esc(b.text)}</span>${b.use === 'home' && !ABOUT.canChooseHome ? '' : `<button class="btn primary" data-n="broadgo">${esc(b.button)}</button>`}<button class="btn" data-n="broadok">${esc(b.later)}</button></div>`; }
+  { const nw = REMOTE ? [] : inboxNew(); if (nw.length) h += `<div class="note" data-note="inbox"><span><b>${nw.length} new 3D file${nw.length === 1 ? '' : 's'} in ${esc(INBOX.loc || 'Downloads')}.</b> Move ${nw.length === 1 ? 'it' : 'them'} into <code>${esc(INBOX.dest)}</code> in your library, where Review can suggest a place?</span><button class="btn primary" data-n="inboxgo">Move ${nw.length === 1 ? 'it' : 'them'} in</button><button class="btn" data-n="inboxshow">Show ${nw.length === 1 ? 'it' : 'them'}</button><button class="btn" data-n="inboxno">Not now</button></div>`; }
   if (NEWS.offer && !ABOUT.outdated) h += `<div class="note"><span><b>${esc(APP())} has been updated to version ${esc(NEWS.offer)}.</b></span><button class="btn primary" data-n="news">What’s new</button><button class="btn" data-n="newsok">OK</button></div>`;
   if (ABOUT.outdated) h += `<div class="note warn"><span><b>Look only.</b> This library was last used with ${esc(APP())} ${esc(ABOUT.outdated.theirs)}; this ${REMOTE ? 'computer' : 'copy'} has ${esc(ABOUT.outdated.mine)}. You can browse and view, but nothing can be changed until it is updated${REMOTE ? ' on the computer' : ''}.</span>${ABOUT.canUpdate ? '<button class="btn primary" data-n="update">Update now</button>' : ''}</div>`;
   else if (ABOUT.update && ABOUT.canUpdate && !NOTE_HIDE.has('upd' + ABOUT.update.latest)) h += `<div class="note"><span><b>${esc(APP())} ${esc(ABOUT.update.latest)} is available.</b> You have ${esc(ABOUT.version)}.</span><button class="btn primary" data-n="update">Update…</button><button class="btn" data-n="later">Later</button></div>`;
@@ -2474,6 +2480,9 @@ $('#notes').addEventListener('click', async e => {
       }
     }
     else if (n === 'newsok') newsSeen();
+    else if (n === 'inboxgo') { const nw = inboxNew(); if (nw.length) { LS.set('inboxskip', [...LS.get('inboxskip', []), ...nw.map(f => f.key)].slice(-2000)); await doMove(nw.map(f => f.p), INBOX.dest); } }
+    else if (n === 'inboxshow') { S.pick = null; S.q = ''; $('#q').value = ''; S.folder = ':' + INBOX.loc; setView('gallery'); render(); $('#main').scrollTop = 0; }
+    else if (n === 'inboxno') LS.set('inboxskip', [...LS.get('inboxskip', []), ...inboxNew().map(f => f.key)].slice(-2000));
     else if (n === 'update') await api('/api/update/start', {});
     else if (n === 'later') NOTE_HIDE.add('upd' + ABOUT.update.latest);
     else if (n === 'usbcopy') USB.drives = (await api('/api/usb/import', { letter, mode: 'copy' })).drives;
@@ -2658,7 +2667,11 @@ $('#review').addEventListener('click', async e => {
         S.sig = ''; await rescan(); if (S.view === 'review') await loadReview();
       }
     }
-    else if (b.dataset.clear) { await api('/api/ai/clear', { type: b.dataset.clear }); await loadReview(); }
+    else if (b.dataset.clear) {
+      const fromPage = b.dataset.clear === 'names' ? reviewOf('ai-rename').filter(x => x.ai === 'page').map(x => x.id) : [];   // names taken from a download's page are not an assistant's: they are dismissed
+      await api('/api/ai/clear', { type: b.dataset.clear }); if (fromPage.length) await api('/api/review/dismiss-many', { ids: fromPage });
+      await loadReview();
+    }
     else if (b.dataset.other !== undefined) {
       const to = await pickDest(`Move “${row.querySelector('.t1').textContent}” to…`);
       if (to !== null) {
@@ -3025,6 +3038,18 @@ PG.shortcuts = SHORTCUTS;
 // build being made now: it is shown under the number the program reports, as long as that is newer than every numbered entry.
 // When a release is cut, give it its number and start a new '' entry for the next one.
 const WHATSNEW = [
+  { v: '2.2.2', title: 'Downloads remember where they came from', items: [
+    'A model downloaded in Find models now remembers the page it came from. Open it and <b>Source</b> takes you back to that page.',
+    'What the page says the model is (its title, designer, description and tags) fills in whatever the file does not say itself. That is every STL, and any 3MF that came without a listing inside it. What a file says about itself is never replaced.',
+    'Files taken out of a downloaded zip remember the zip’s page too, and a rename keeps it.',
+    'Review uses it: a download whose name says nothing (<code>body_v3.stl</code>) is offered the name its page gives the model, and a folder that matches the page’s title or tags. A 3MF’s own listing title is used the same way. Both wait for your approval like everything else, and neither needs an AI key.',
+    'Search finds a model by its designer and its page’s tags, and pressing a designer’s name shows everything you have from them.',
+    'A model’s <b>Licence</b>, as its page states it, is shown with the model, so you can tell at a glance what may be sold or remixed. Read the page itself before relying on it.',
+    'In Find models, the bar tells you when a page’s model is <b>in your library already</b>, and the start page lists what you have downloaded since the program was started. Either takes you to the file in the gallery.',
+    'Still downloading in your usual browser? If your Downloads folder is one of your locations, PrintBinder now offers to move new 3D files from it into your library’s unsorted folder. Nothing moves unless you press the button.',
+    'It survives the slicer: a model saved again under its own name keeps its page, and so does a slicer project made from a downloaded file, or a file saved beside it under the same name.',
+    'If you use an AI assistant, it is given those details along with the preview when you ask it to describe or name a model, marked as what a web page claims, so a mislabelled model can still be caught by how it looks.',
+  ] },
   { v: '2.2.1', title: 'No firewall question from Find models', items: [
     'Opening a site in Find models could make Windows Firewall ask whether PrintBinder may be reached from the network. Browsing never needs that, and the question no longer appears. If you were asked, either answer was harmless.',
   ] },
@@ -3148,6 +3173,9 @@ const GUIDE = [
   ['slicers', 'Slicers', () => `<p>On the computer, <b>Send to slicer</b> opens a model in your slicer. The first time, the program lists the slicers it finds installed; choose which to keep and which is the default${REMOTE ? '' : ' (<button class="linkb" data-help="do-slicers">Slicers…</button>)'}. With more than one, the small arrow beside the button picks another. A phone cannot start a slicer.</p>`],
   ['find', 'Find models online', () => `<p>On the computer, <b>Find models</b> in the top bar (or File > Find models online, Ctrl+B) opens a second window for model sites. Its start page has Printables, MakerWorld, Creality Cloud and Thingiverse. Any other site works too: type its address in the bar, and <b>Save site</b> keeps the page you are on for next time.</p>
     <p>Sign in to a site there if you want to, and press its download button. A 3D file, a zip, a picture or a sheet of instructions is saved into the unsorted folder of your library (a folder called <code>Unsorted</code>, made for you if you have none), and Review suggests where it belongs. Nothing that is downloaded is opened or run, and any other kind of file is refused: use <b>Open in my browser</b> for those.</p>
+    <p>Each download remembers the page it came from. Open the model and <b>Source</b> takes you back there. What the page says the model is (title, designer, description, tags) fills in what the file does not say itself, which is everything for an STL, and it goes along to files you take out of a downloaded zip. It also stays when you save the model again from your slicer under its own name, and a slicer project made from a downloaded file, or saved beside it under the same name, is given that file’s page (marked “from the file this was made from”, since that is matched by name).</p>
+    <p>The licence the page states is noted too and shown as <b>Licence</b> on the model. When you open a page whose model you already have, the bar says <b>In your library already</b>; press it to see the file. The start page lists what you have downloaded since the program was started.</p>
+    <p>If you download in your usual browser instead, add your Downloads folder as a location: when new 3D files turn up there, a bar at the top offers to move them into your library’s unsorted folder.</p>
     <p>That window is kept apart from the rest of ${esc(APP())}: its pages cannot see your library, your files or your AI keys, and are refused this computer’s own addresses and those of your home network. Sign-ins made there are remembered for that window only, on this computer; <b>Clear sign-ins</b> forgets them. If a site will not sign you in there, <b>Open in my browser</b> sends the page to your usual browser.</p>`],
   ['usb', 'USB drives and zip files', () => `<p>Plug in a USB drive that holds 3D files and a bar at the top offers to <b>Copy</b> or <b>Move</b> them into the library, or just to show the drive. Files the library already has are skipped; a move removes a file from the drive only after its copy has been checked.</p>
     <p>A zip shows as a package with a count of the 3D files inside. Open it to see its contents with previews — looking unpacks nothing. Take out the files you choose, or unpack everything into a folder beside it; each file is checked against the zip’s own checksum, and unpacking can be undone. What is inside a zip is not part of the library, and is never sent to an AI, until it is taken out.</p>`],
@@ -3166,8 +3194,8 @@ const GUIDE = [
 const privacyHTML = () => `<h3>Privacy</h3>
   <p><b>Your files stay on your computer.</b> ${esc(APP())} has no account, no sign-in of its own and no server of its own. It collects nothing about you or your library and sends no usage figures, crash reports or telemetry of any kind.</p>
   <h4>What can leave the computer, and when</h4>
-  <ul><li><b>AI features — only if you entered a key, and only when you press a button or send a message.</b> The request goes straight from your computer to the company whose key you entered (Anthropic for Claude, OpenAI for ChatGPT, Google for Gemini). It can hold preview pictures, file and folder names, descriptions and tags, facts read from your files (a listing title, part names, measured size, printer and material) and what you type to the assistant. <b>Model files themselves are never sent.</b> Hidden folders and the contents of zip files are never shown or sent. What that company does with what it receives is set by its own terms, not by this program.</li>
-  <li><b>Find models online — only if you open it, and only the sites you visit.</b> That window is a web browser. A site you open in it sees what any website sees (your internet address, and what you do on that site) and can keep cookies and a sign-in, which stay on this computer in this Windows user’s settings folder until you press <b>Clear sign-ins</b>. Nothing from your library is sent: those pages cannot see your files, your folders or your AI keys. ${esc(APP())} keeps no record of the pages you visit. What a site does with what it receives is set by its own terms.</li>
+  <ul><li><b>AI features — only if you entered a key, and only when you press a button or send a message.</b> The request goes straight from your computer to the company whose key you entered (Anthropic for Claude, OpenAI for ChatGPT, Google for Gemini). It can hold preview pictures, file and folder names, descriptions and tags, facts read from your files (a listing title, part names, measured size, printer and material), for a model downloaded in Find models what its page says it is, and what you type to the assistant. <b>Model files themselves are never sent.</b> Hidden folders and the contents of zip files are never shown or sent. What that company does with what it receives is set by its own terms, not by this program.</li>
+  <li><b>Find models online — only if you open it, and only the sites you visit.</b> That window is a web browser. A site you open in it sees what any website sees (your internet address, and what you do on that site) and can keep cookies and a sign-in, which stay on this computer in this Windows user’s settings folder until you press <b>Clear sign-ins</b>. Nothing from your library is sent: those pages cannot see your files, your folders or your AI keys. ${esc(APP())} keeps no record of the pages you visit, with one exception: for each file you download there, it notes the page it came from (its address and what the page says the model is) in your library’s data folder, so the model can be found and named properly. What a site does with what it receives is set by its own terms.</li>
   <li><b>Looking for an update.</b> When the program starts, and when you choose Check for updates, it asks the place its releases are published whether there is a newer version. The request says nothing about you or your library; like any web request it comes from your internet address.</li>
   <li><b>Feedback — only if you send it.</b> “Give feedback” opens your own email program with a message you can read and change. Nothing is sent until you press Send there.</li></ul>
   <h4>Phone access — home network only, not encrypted</h4>
@@ -3582,6 +3610,8 @@ document.addEventListener('keydown', e => {
 });
 document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - S.scannedAt > 30000) rescan(); });
 window.rescanNow = () => { S.sig = ''; return rescan(); };
+// the Find models window asking for one file to be shown here: its folder, and the file opened
+window.showInGallery = async p => { if (!S.byPath.get(p)) { S.sig = ''; await rescan(); } if (!S.byPath.get(p)) return false; S.pick = null; S.q = ''; $('#q').value = ''; S.folder = dirOf(p); setView('gallery'); render(); previewFile(p); return true; };
 tellDesk();
 // the regular look for changes starts once the first check of the folders is in — or, if that one never answers, once a later one is
 let polling = false;

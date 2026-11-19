@@ -313,6 +313,7 @@ function stampSeen(files, prev) {
   const first = !SEEN, now = Math.round(Date.now() / 1000);   // kept in seconds
   if (first) SEEN = { v: 1, since: Date.now(), t: {} };
   const was = prev ? new Map(prev.files.map(f => [f.p, f])) : null;
+  if (was) for (const f of files) { const o = was.get(f.p); if (o && (o.s !== f.s || o.m !== f.m)) sourceFollows(thumbKey(o), thumbKey(f)); }   // saved again in place (a slicer, say): where it was downloaded from stays with it
   let changed = first;
   for (const f of files) {
     const k = seenKey(f);
@@ -442,11 +443,108 @@ const metaDone = m => !!m && m.v === META_V && !metaStale(m);
 const meta = readJSON('meta.json', {});   // preview-style key -> { pr, pf, mt, pt }  ({} when the file records nothing)
 let metaRev = 0, metaTimer = null, metaBusy = false;
 const saveMeta = () => { clearTimeout(metaTimer); metaTimer = setTimeout(() => { try { writeJSON('meta.json', meta); } catch (e) { log('meta save', e.message); } }, 3000); };
+// ---------- where a download came from (Find models online) ----------
+// When a file is downloaded in the Find models window, the page it came from is noted: its address, and what the page says the
+// model is (title, designer, description, tags). It is kept in the shared data, keyed like a preview, and goes with the file
+// when it is renamed and to the files taken out of a zip. It only ever fills gaps: what a file says about itself comes first.
+// Every word of it was written by a stranger's web page, so it is cut to size here and treated as a claim wherever it is used.
+const sources = readJSON('sources.json', {});   // preview-style key -> { u, s, ti, by, ab, tg, at }
+let srcTimer = null;
+const saveSources = () => { clearTimeout(srcTimer); srcTimer = setTimeout(() => { try { writeJSON('sources.json', sources); } catch (e) { log('sources save', e.message); } }, 1200); };
+const srcText = (v, max) => String(v == null ? '' : v).replace(/[\u0000-\u001f\u007f\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
+function cleanSource(i) {
+  if (!i || typeof i !== 'object') return null;
+  let u; try { u = new URL(String(i.u || '')); } catch { return null; }
+  if (u.protocol !== 'https:' && u.protocol !== 'http:') return null;
+  u.hash = ''; u.username = ''; u.password = '';
+  if (u.href.length > 600) return null;
+  const o = { u: u.href, s: u.hostname.replace(/^www\./, '').slice(0, 100), at: Date.now() };
+  const n = srcText(i.n, 200); if (n) o.n = n;
+  if (i.z === 1) o.z = 1;
+  // the licence the page states: a Creative Commons address says exactly which one; anything else is kept as the page words it
+  let lu = null; try { lu = new URL(String(i.lu || '')); } catch {}
+  if (lu && (lu.protocol === 'https:' || lu.protocol === 'http:') && lu.href.length <= 300) {
+    const cc = /(^|\.)creativecommons\.org$/i.test(lu.hostname) && (/^\/licenses\/([a-z-]+)\/(\d\.\d)/i.exec(lu.pathname) || /^\/publicdomain\/(zero|mark)\/(\d\.\d)/i.exec(lu.pathname));
+    if (cc) { o.lc = /zero/i.test(cc[1]) ? 'CC0 ' + cc[2] + ' (public domain)' : /mark/i.test(cc[1]) ? 'Public Domain Mark ' + cc[2] : 'CC ' + cc[1].toUpperCase() + ' ' + cc[2]; o.lu = lu.href; }
+    else { const lt = srcText(i.lt, 80); if (lt) { o.lc = lt; o.lu = lu.href; } }
+  } else { const lt = srcText(i.lt, 80); if (lt && /licen[cs]e|creative commons|public domain|\bcc[ -]?(by|0)\b|all rights reserved/i.test(lt)) o.lc = lt; }
+  if (i.tq === 1 || i.tq === true) o.tq = 1;   // the page gave its title as a title to be shown elsewhere (not just whatever was in the window's title bar)
+  const ti = srcText(i.ti, 200), by = srcText(i.by, 100), ab = srcText(i.ab, 1500);
+  if (ti) o.ti = ti; if (by) o.by = by; if (ab && ab.toLowerCase() !== ti.toLowerCase()) o.ab = ab;
+  const tg = [...new Set((Array.isArray(i.tg) ? i.tg : []).map(t => srcText(t, 40).toLowerCase()).filter(Boolean))].slice(0, 12);
+  if (tg.length) o.tg = tg;
+  return o;
+}
+function noteSource(abs, info) {
+  if (OUTDATED) return false;
+  try { const st = fs.statSync(abs), c = cleanSource(info); if (!c || !st.isFile()) return false;
+    if (!c.n) c.n = srcText(path.basename(abs), 200);   // the name the site gave it, before any "(2)" was added here
+    sources[thumbKey({ p: abs.split(path.sep).join('/'), s: st.size, m: Math.round(st.mtimeMs) })] = c; srcRev++; saveSources(); return true; }
+  catch (e) { log('source not noted', e.message); return false; }
+}
+const sourceFollows = (a, b, part) => { if (a !== b && sources[a] && !sources[b]) { sources[b] = part ? { ...sources[a], z: 1 } : sources[a]; srcRev++; saveSources(); } };   // part: one file out of a zip, not the download itself   // a rename, a save in place, or a file taken out of a zip
+// A file made from a downloaded one has no page of its own, but it is the same model:
+//   - a slicer project records the name of the file it was made from ("Was called"); when exactly one downloaded file had that name,
+//     the project takes that file's page;
+//   - a file saved beside a downloaded one under the same name with another ending (benchy.stl, benchy.3mf) takes its page too.
+// These are matches by name, so they can be wrong; they only fill gaps, like any page details, and are marked (si) where shown.
+let srcRev = 0, srcIdx = null;
+const srcStem = n => lc(String(n || '').replace(/\.[^./\\]+$/, '').trim());
+function sourceIndex() {
+  const sc = lastScan;
+  if (srcIdx && srcIdx.sc === sc && srcIdx.rev === srcRev) return srcIdx;
+  const byStem = new Map(), byPlace = new Map(), put = (map, key, k) => { if (!key) return; const had = map.get(key); map.set(key, had === undefined || sources[had] === sources[k] ? k : null); };   // null: more than one model answers to it
+  for (const [k, v] of Object.entries(sources)) put(byStem, srcStem(v.n), k);
+  if (sc) for (const f of sc.files) { const k = thumbKey(f); if (!sources[k]) continue; put(byStem, srcStem(baseOf(f.p)), k); put(byPlace, lc(dirOf(f.p)) + '|' + srcStem(baseOf(f.p)), k); }
+  return (srcIdx = { sc, rev: srcRev, byStem, byPlace });
+}
+function sourceFrom(f, m) {
+  const ix = sourceIndex();
+  for (const name of (m && m.og) || []) { const k = ix.byStem.get(srcStem(name)) || ix.byStem.get(lc(String(name).trim())); if (k && sources[k]) return sources[k]; }
+  const k = ix.byPlace.get(lc(dirOf(f.p)) + '|' + srcStem(baseOf(f.p)));
+  return k && sources[k] ? sources[k] : null;
+}
+// The same model page, whichever of its tabs was showing: the same site, and one address is the other with something added.
+const samePage = (a, b) => { try { const x = new URL(a), y = new URL(b); if (x.hostname.replace(/^www\./, '') !== y.hostname.replace(/^www\./, '')) return false;
+  const p = x.pathname.replace(/\/+$/, ''), q = y.pathname.replace(/\/+$/, ''); if (p === q) return p.length > 1 || x.search === y.search;
+  const [s, l] = p.length < q.length ? [p, q] : [q, p]; return l.startsWith(s + '/') && (s.split('/').length > 2 || /[\d:]/.test(s)); } catch { return false; } };
+function sourcesAt(url) {
+  const sc = visible(lastScan), out = []; if (!sc) return out;
+  const hit = new Set(Object.entries(sources).filter(([, v]) => samePage(v.u, url)).map(([k]) => k)); if (!hit.size) return out;
+  for (const f of sc.files) { if (out.length >= 50) break; if (hit.has(thumbKey(f))) out.push({ p: f.p, name: baseOf(f.p) }); }
+  return out;
+}
+// (8) New 3D files in a Downloads folder shown as another location: the ones first seen in the last two weeks. The page offers to
+// move them into the library's unsorted folder; nothing is moved unless that button is pressed.
+const unsortedRel = () => {
+  const sc = lastScan, is = n => norm(n) === 'unsorted', home = sc ? sc.dirs.filter(d => d[0] !== ':') : [];
+  return home.find(d => !d.includes('/') && is(d)) || home.find(d => d.split('/').length === 2 && !/^[._$]/.test(d) && is(baseOf(d))) || 'Unsorted';
+};
+function inbox() {
+  const sc = visible(lastScan), out = { files: [], loc: '', dest: unsortedRel() }; if (!sc) return out;
+  const dl = LOCS.filter(l => !l.home && !l.usb && /^downloads?$/i.test(path.basename(String(l.root || '')))); if (!dl.length) return out;
+  const since = Date.now() - 14 * 86400000;
+  for (const l of dl) for (const f of sc.files) {
+    if (!f.p.startsWith(':' + l.name + '/') || !(f.a > since) || !(f.m > since - 16 * 86400000) || out.files.length >= 200) continue;   // newly seen, and not an old file in a folder that was only just added
+    const ext = extOf(f.p), z = ext === 'zip' ? zipOf(f) : null;
+    if (MODEL.has(ext) || (z && z.zm > 0)) { out.files.push({ p: f.p, key: thumbKey(f) }); out.loc = l.name; }
+  }
+  return out;
+}
 const metaOf = f => {
-  const m = metaWant(f) ? meta[thumbKey(f)] : null;
-  if (!m || !(m.pr || m.mt || m.pt || m.ti || m.ab || m.pn || m.og || m.sz)) return null;
-  return { pr: m.pr || undefined, pf: m.pf && m.pf !== m.pr ? m.pf : undefined, mt: m.mt || undefined, pt: m.pt || undefined,
-    ti: m.ti || undefined, by: m.by || undefined, ab: m.ab || undefined, pn: m.pn || undefined, pm: m.pm || undefined, og: m.og || undefined, sz: m.sz || undefined, n: m.n > 1 ? m.n : undefined };
+  const k = thumbKey(f), m0 = metaWant(f) ? meta[k] : null, m = m0 && (m0.pr || m0.mt || m0.pt || m0.ti || m0.ab || m0.pn || m0.og || m0.sz) ? m0 : null, own = sources[k], src = own || sourceFrom(f, m);
+  if (!m && !src) return null;
+  const o = m ? { pr: m.pr || undefined, pf: m.pf && m.pf !== m.pr ? m.pf : undefined, mt: m.mt || undefined, pt: m.pt || undefined,
+    ti: m.ti || undefined, by: m.by || undefined, ab: m.ab || undefined, pn: m.pn || undefined, pm: m.pm || undefined, og: m.og || undefined, sz: m.sz || undefined, n: m.n > 1 ? m.n : undefined } : {};
+  if (src) {   // the page fills what the file does not say, and never replaces what it does
+    o.sp = src.u; o.sw = src.s || undefined; if (!own) o.si = 1; if (src.z) o.sz1 = 1;   // si: taken from the file this one was made from
+    if (!o.ti && src.ti) { o.ti = src.ti; o.tw = 1; if (src.tq) o.tq = 1; }
+    if (!o.by && src.by) { o.by = src.by; o.bw = 1; }
+    if (!o.ab && src.ab) { o.ab = src.ab; o.aw = 1; }
+    if (src.tg) o.stg = src.tg;
+    if (src.lc) { o.lic = src.lc; if (src.lu) o.licu = src.lu; }
+  }
+  return o;
 };
 const metaReady = () => !metaBusy && !!lastScan && !lastScan.files.some(f => metaWant(f) && !metaDone(meta[thumbKey(f)]));
 async function metaPump() {
@@ -760,7 +858,7 @@ const stemOf = w => w.length > 4 && w.endsWith('ies') ? w.slice(0, -3) + 'y' : w
 // Worked out once per scan (and again when the hidden list changes): Review asks for the list every few seconds.
 let moveCache = null;
 function builtinMoves(sc) {
-  if (moveCache && moveCache.of === sc) return moveCache.list;
+  if (moveCache && moveCache.of === sc && moveCache.rev === metaRev + '/' + srcRev) return moveCache.list;
   const list = [];
   const have = new Set(sc.files.map(f => f.p.toLowerCase()));
   // what the library's own folders say about where things go
@@ -811,6 +909,17 @@ function builtinMoves(sc) {
     }
     return null;
   };
+  // When a file's own name points nowhere, what the model is called may: the title inside the file (a 3MF's listing), or the title
+  // and tags of the page it was downloaded from. The reason given says which, because a page's words are only a claim.
+  const said = (f, inside) => {
+    const mo = metaOf(f); if (!mo) return null;
+    const own = !mo.tw && mo.ti ? match(mo.ti + '.x', inside) : null;
+    if (own) return { d: own.d, why: own.why.replace(/^name matches/, 'its listing title (“' + mo.ti.slice(0, 60) + '”) matches').replace(/^name contains/, 'its listing title contains') };
+    if (!mo.sp) return null;
+    const words = [mo.tw ? mo.ti : '', ...(mo.stg || [])].filter(Boolean).join(' '); if (!words) return null;
+    const pg = match(words + '.x', inside), from = mo.sw || 'the page it came from';
+    return pg ? { d: pg.d, why: pg.why.replace(/^name matches/, 'its page on ' + from + ' matches').replace(/^name contains/, 'its page on ' + from + ' says') } : null;
+  };
   for (const f of sc.files) {
     if (f.p[0] === ':') continue;   // files in other locations are the assistants' business (Auto sort), not these rules'
     const dir = dirOf(f.p), ext = extOf(f.p), name = baseOf(f.p);
@@ -818,21 +927,21 @@ function builtinMoves(sc) {
     let to = null, why = '';
     if (dir === '') {
       if (modelish) {
-        const m = match(name, null);
+        const m = match(name, null) || said(f, null);
         if (m) { to = m.d; why = 'Loose in the top folder; ' + m.why + '.'; }
         else if (PARK) { to = PARK; why = 'Loose in the top folder with no obvious category — park it in “' + baseOf(PARK) + '” with the other files waiting to be sorted.'; }
       } else if (VIDEO.has(ext) && VID) { to = VID; why = 'Loose video in the top folder.'; }
       else if (IMAGE.has(ext) && PIC) { to = PIC; why = 'Loose picture in the top folder.'; }
     } else if (modelish && holding.includes(dir)) {
-      const m = match(name, null);
+      const m = match(name, null) || said(f, null);
       if (m) { to = m.d; why = 'Sitting in “' + baseOf(dir) + '”; ' + m.why + '.'; }
     } else {
       if (modelish && parking.includes(dir)) {   // sitting in the downloads folder: looked at like a file in "Unsorted"
-        const m = match(name, null);
+        const m = match(name, null) || said(f, null);
         if (m) { to = m.d; why = 'Sitting in “' + baseOf(dir) + '”; ' + m.why + '.'; }
       }
       if (!to && modelish && !inHolding(dir) && (kids.get(dir) || []).length >= 2 && dir !== PIC && !(PIC && under(dir, PIC))) {   // loose beside the folders it could be filed in
-        const m = match(name, dir), wait = (kids.get(dir) || []).find(d => isHolding(baseOf(d)));
+        const m = match(name, dir) || said(f, dir), wait = (kids.get(dir) || []).find(d => isHolding(baseOf(d)));
         if (m) { to = m.d; why = 'Loose in “' + baseOf(dir) + '”; ' + m.why + '.'; }
         else if (wait) { to = wait; why = 'Loose in “' + baseOf(dir) + '” with no obvious category.'; }
       }
@@ -842,7 +951,7 @@ function builtinMoves(sc) {
     if (have.has(dest.toLowerCase())) continue;
     list.push({ f, to: dest, why });
   }
-  moveCache = { of: sc, list };
+  moveCache = { of: sc, list, rev: metaRev + '/' + srcRev };
   return list;
 }
 
@@ -880,6 +989,23 @@ function buildReview() {
     else if (ext === 'zip' && hashes[fk(f)] && hashes[fk(f)].z === false) add({ type: 'broken', ...info(f), why: 'Not a complete zip — the end of the archive is missing (incomplete download?).' });
   }
   out.push(...ai.suggestions(sc, info));   // Claude's suggestions wait here for approval like all the others
+  // A downloaded file whose name says nothing of what it is ("body_v3.stl") is offered the name its page gives the model. Only for a
+  // file that has a page of its own, only when no word of that title is in its name already, and never when an assistant has
+  // already suggested a name for it. It waits for approval like every other suggestion, and the owner can type another name.
+  {
+    const named = new Set(out.filter(s => s.type === 'ai-rename').map(s => s.p)), taken = new Set(sc.files.map(f => lc(f.p)));
+    for (const f of sc.files) {
+      if (f.p[0] === ':' || named.has(f.p) || !(MODEL.has(extOf(f.p)) || extOf(f.p) === 'zip')) continue;
+      const mo = metaOf(f); if (!mo || !mo.sp || mo.si || mo.sz1 || !mo.tw || !mo.tq || !mo.ti) continue;
+      const stem = baseOf(f.p).replace(/\.[^.]+$/, ''), fn = norm(stem), tw = wordsOf(mo.ti).map(stemOf).filter(w => w.length >= 4 && !SMALLWORDS.has(w));
+      if (!tw.length || tw.some(w => fn.includes(w)) || norm(mo.ti).length < 4) continue;
+      const ext = (/\.[^./]+$/.exec(baseOf(f.p)) || [''])[0], name = cleanName(mo.ti.slice(0, 80).trim() + ext);
+      if (!name || name === baseOf(f.p)) continue;
+      const dir = dirOf(f.p), to = (dir ? dir + '/' : '') + name; if (taken.has(lc(to))) continue;
+      taken.add(lc(to));
+      add({ type: 'ai-rename', src: 'page', ai: 'page', ...info(f), name, why: 'Its name does not say what it is. Its page on ' + (mo.sw || 'the site it came from') + ' calls it “' + mo.ti.slice(0, 80) + '”' + (mo.by ? ', by ' + mo.by.slice(0, 60) : '') + '.' });
+    }
+  }
   const gone = new Set(state.dismissed);
   // an AI suggestion that names a hidden folder (as the thing to change, or as where something should go) is left out too
   const hid = s => hiddenIn(s.p) || (s.type === 'ai-plan' ? s.op !== 'rename' && hiddenIn(s.to) : typeof s.to === 'string' && hiddenIn(dirOf(s.to)));
@@ -935,6 +1061,15 @@ async function applySuggestion(id, list, over) {
     if (!list) await freshScan();
     return done;
   }
+  if (s.type === 'ai-rename') {   // a name taken from the page a file was downloaded from (the assistants' names were dealt with above)
+    const st0 = await fsp.stat(absOf(s.p)).catch(() => null);
+    if (!st0 || st0.size !== s.s) throw new Error('The file has changed or moved since the scan — nothing was done.');
+    const r = await renameItem(s.p, s.name);
+    log('approved a name', JSON.stringify(s.p), '->', JSON.stringify(s.name));
+    if (!list) await freshScan();
+    return r.done;
+  }
+  if (s.type !== 'move' && s.type !== 'dup' && s.type !== 'broken') throw new Error('That kind of suggestion cannot be approved here — nothing was done.');
   const from = absOf(s.p);
   const st = await fsp.stat(from).catch(() => null);
   if (!st || st.size !== s.s) throw new Error('The file has changed or moved since the scan — nothing was done.');
@@ -1291,6 +1426,7 @@ async function renameItem(p, name) {
     const m = Math.round(st.mtimeMs), a = thumbKey({ p: rel, s: st.size, m }), b = thumbKey({ p: toRel, s: st.size, m });
     try { if (thumbs.get(a) === 'ok' && !thumbs.has(b)) { fs.copyFileSync(path.join(THUMBS, a + '.img'), path.join(THUMBS, b + '.img')); thumbs.set(b, 'ok'); } } catch {}
     ai.copyDesc(a, b);
+    sourceFollows(a, b);   // and where it was downloaded from
     if (SEEN && !OUTDATED && SEEN.t[a.slice(0, 12)] !== undefined && SEEN.t[b.slice(0, 12)] === undefined) { SEEN.t[b.slice(0, 12)] = SEEN.t[a.slice(0, 12)]; saveSeen(); }   // the date it was added goes with it
   }
   refreshState();
@@ -1465,6 +1601,7 @@ async function unzip(body) {
           }
           if (await exists(to)) { skipped.push({ p: x.e.name, why: 'the same name appeared there meanwhile' }); continue; }
           await fsp.rename(x.out, to);
+          x.placed = true;
           const h = record('unzip', rel + '/' + x.sub, x.toRel); h.copy = true;
           done.push(h); placed++;
         } catch (e) { skipped.push({ p: x.e.name, why: e.code || e.message }); }
@@ -1473,6 +1610,10 @@ async function unzip(body) {
     }
   } catch (e) { await fsp.rm(stage, { recursive: true, force: true }).catch(() => {}); throw e; }
   finally { jobEnd(job); saveState(); }
+  try {   // files taken out of a downloaded zip came from the page the zip came from
+    const zst = fs.statSync(abs), zk = thumbKey({ p: rel, s: zst.size, m: Math.round(zst.mtimeMs) });
+    if (sources[zk]) for (const x of go) { if (!fresh && !x.placed) continue; const st = await fsp.stat(absOf(x.toRel)).catch(() => null); if (st && st.isFile()) sourceFollows(zk, thumbKey({ p: x.toRel, s: st.size, m: Math.round(st.mtimeMs) }), true); }
+  } catch (e) { log('source not carried from the zip', e.message); }
   log('unpacked', placed, 'of', want.length, 'from', JSON.stringify(rel), '->', JSON.stringify(dest));
   return { done, skipped, clashes: [], cancelled: false, dest, count: placed, whole: all && !skipped.length && placed === want.length };
 }
@@ -1720,6 +1861,7 @@ async function handle(req, res, remote) {
         const since = +u.searchParams.get('since') || 0;
         return sendJSON(res, 200, { seq, sig: lastScan && visible(lastScan).sig, scan: { on: scanStat.on, seen: scanStat.seen, idle: scanStat.on ? Date.now() - scanStat.at : 0 }, pending: pendingCount(), bg, review: buildReview().length, ai: ai.rev() + metaRev, events: events.filter(e => e.seq > since) });
       }
+      if (route === '/api/inbox') return sendJSON(res, 200, remote ? { files: [], loc: '', dest: '' } : inbox());
       if (route === '/api/review') refreshState();
       if (route === '/api/review') return sendJSON(res, 200, { items: buildReview(), bg, history: state.history, trash: TRASH, dismissed: state.dismissed.length + ai.stays() });
       if (route === '/api/fs/job') { const j = JOBS.get(String(u.searchParams.get('id'))); return sendJSON(res, 200, j ? { running: true, done: j.done, total: j.total, name: j.name } : { running: false }); }
@@ -1897,4 +2039,4 @@ function fileOnShow(p) {
   const rel = safeRel(p), sc = visible(lastScan), f = rel && sc && sc.files.find(x => x.p === rel);
   return f ? { abs: absOf(rel), thumb: f.key && thumbs.get(f.key) === 'ok' ? path.join(THUMBS, f.key + '.img') : null } : null;
 }
-module.exports = { ready, hooks, ROOT, DATA, APPDIR, LOCS, VERSION, log, fileOnShow, outdated: OUTDATED ? { theirs: lastUsed.version, mine: VERSION } : null };
+module.exports = { ready, hooks, ROOT, DATA, APPDIR, LOCS, VERSION, log, fileOnShow, noteSource, sourcesAt, outdated: OUTDATED ? { theirs: lastUsed.version, mine: VERSION } : null };

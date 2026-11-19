@@ -9,9 +9,10 @@
 //                   the library; the window itself works out where they are and refuses anything that is not a file on show.
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
-//   findModels() — the page asking for the Find models online window (browser.js) to be opened; it carries nothing.
+//   findModels(url) — the page asking for the Find models online window (browser.js) to be opened, at the page a model was
+//                   downloaded from if one is given; the window itself decides whether that address may be opened.
 contextBridge.exposeInMainWorld('pgDesk', {
-  findModels: () => { try { ipcRenderer.send('pg-find-models'); } catch {} },
+  findModels: url => { try { ipcRenderer.send('pg-find-models', typeof url === 'string' ? url : ''); } catch {} },
   pathFor: file => { try { return webUtils.getPathForFile(file) || ''; } catch { return ''; } },
   view: v => { try { ipcRenderer.send('pg-view', { size: String(v.size), layout: String(v.layout), sort: String(v.sort), rev: !!v.rev }); } catch {} },
   dragOut: list => { try { ipcRenderer.send('pg-drag', (Array.isArray(list) ? list : [list]).map(String).slice(0, 500)); } catch {} },

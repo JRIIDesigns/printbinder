@@ -11,7 +11,8 @@
 //   - a pop-up (a site's "Sign in with Google" window) is a small window with the same walls, and its title is the address it shows;
 //   - a download is never opened or run. Only the kinds of file a model site hands out are saved (3D files, zips, pictures,
 //     instructions), into the library's unsorted folder, where Review can suggest a place for them; everything else is refused.
-// Nothing about the pages visited is written down by the program.
+// Nothing about the pages visited is written down by the program, with one exception: the page a file was downloaded from is
+// noted with that file (its address and what the page says the model is), so the model can be found and named properly later.
 const { BrowserWindow, WebContentsView, session, ipcMain, shell, app } = require('electron');
 const path = require('path');
 const fs = require('fs');
@@ -57,7 +58,7 @@ function allowedSync(url) {
 }
 const hostText = url => { try { return new URL(url).hostname.replace(/^www\./, '') || ''; } catch { return ''; } };
 
-module.exports = function makeBrowser(c) {   // c: { root(), rescan(), log() }
+module.exports = function makeBrowser(c) {   // c: { root(), rescan(), log(), source(file, info) }
   let win = null, view = null, ses = null, home = true, wired = false;
   const popups = new Set();
   const log = (...a) => { try { if (c.log) c.log('find models:', ...a); } catch {} };   // faults only: never an address or a page
@@ -116,6 +117,40 @@ module.exports = function makeBrowser(c) {   // c: { root(), rescan(), log() }
     if (!stem || /^(con|prn|aux|nul|com\d|lpt\d)$/i.test(stem)) stem = '_' + stem;
     return ext ? stem + '.' + ext : stem;
   }
+  // What the page being shown says the model is: read once, at the moment a download starts. The page wrote every word of it,
+  // so it comes back as plain text of limited length and is cleaned again where it is stored (server.js, cleanSource).
+  const PAGE_FACTS = `(() => { const g = s => { const e = document.querySelector(s); return e ? String(e.getAttribute('content') || '') : ''; };
+    let by = g('meta[name="author"]'), tags = [];
+    try { for (const s of document.querySelectorAll('script[type="application/ld+json"]')) { let j; try { j = JSON.parse(s.textContent); } catch { continue; }
+      for (const o of [].concat((j && j['@graph']) || j)) { if (!o || typeof o !== 'object') continue; const a = [].concat(o.author || o.creator || [])[0];
+        if (!by && a) by = typeof a === 'string' ? a : String(a.name || ''); if (!tags.length && o.keywords) tags = Array.isArray(o.keywords) ? o.keywords : String(o.keywords).split(','); } } } catch {}
+    let lt = '', lu = '';
+    try { const a = document.querySelector('a[href*="creativecommons.org/licenses/"], a[href*="creativecommons.org/publicdomain/"], a[rel~="license"], link[rel~="license"]'); if (a) { lu = String(a.href || ''); lt = String(a.textContent || a.title || '').replace(/\s+/g, ' ').trim(); } } catch {}
+    const kw = g('meta[name="keywords"]'); if (!tags.length && kw) tags = kw.split(',');
+    return { marked: !!g('meta[property="og:title"]'), title: String(g('meta[property="og:title"]') || document.title || '').slice(0, 400), desc: String(g('meta[property="og:description"]') || g('meta[name="description"]') || '').slice(0, 3000),
+      lt: String(lt).slice(0, 200), lu: String(lu).slice(0, 300), by: String(by || '').slice(0, 200), site: String(g('meta[property="og:site_name"]') || '').slice(0, 100), tags: tags.slice(0, 20).map(t => String(t).slice(0, 60)) }; })()`;
+  async function pageFacts() {
+    if (home || !view) return null;
+    const wc = view.webContents, u = wc.getURL(); if (!/^https?:/i.test(u) || !allowedSync(u)) return null;
+    let p = null; try { p = await Promise.race([wc.executeJavaScript(PAGE_FACTS, false), new Promise(ok => setTimeout(() => ok(null), 1500))]); } catch {}
+    const info = { u };
+    if (p && typeof p === 'object') {
+      let ti = String(p.title || ''), by = String(p.by || ''); const site = String(p.site || '') || hostText(u).split('.')[0];
+      // "Model name by Someone | Download free STL model | Site.com" and "Model name by Someone - Site": the model's name is the first part
+      ti = ti.split(' | ')[0]; const tail = ti.lastIndexOf(' - '); if (tail > 0 && site && ti.slice(tail + 3).toLowerCase().replace(/[^a-z0-9]/g, '').includes(site.toLowerCase().replace(/[^a-z0-9]/g, ''))) ti = ti.slice(0, tail);
+      const m = / by ([^|]{2,80})$/i.exec(ti); if (m) { if (!by) by = m[1]; ti = ti.slice(0, m.index); }
+      info.ti = ti.trim(); info.by = by.trim(); if (p.marked === true) info.tq = 1;
+      info.lt = String(p.lt || ''); info.lu = String(p.lu || ''); info.ab = String(p.desc || ''); info.tg = Array.isArray(p.tags) ? p.tags.map(String) : [];
+    }
+    return info;
+  }
+  const dlList = [];   // this run's downloads, newest first: { name, where, p } — shown on the start page, kept nowhere
+  let have = [], haveFor = '', haveTimer = null;
+  const sendSession = () => tell('pb-dl', dlList.map(d => ({ name: d.name, where: d.where })));
+  function checkHave() {   // does the library already hold something from this page?
+    clearTimeout(haveTimer);
+    haveTimer = setTimeout(() => { if (!view || !c.have) return; const u = home ? '' : view.webContents.getURL(); have = u && /^https?:/i.test(u) ? c.have(u) : []; haveFor = u; tell('pb-have', { n: have.length, name: have[0] ? have[0].name : '' }); }, 350);
+  }
   let lastDl = { url: '', at: 0 }, active = 0; const recent = [], claimed = new Set();
   function closeIfEmpty(wc) { try { for (const w of popups) if (w.webContents === wc && !/^https?:/i.test(wc.getURL())) setTimeout(() => { try { w.close(); } catch {} }, 300); } catch {} }
   async function download(item, from) {
@@ -138,6 +173,7 @@ module.exports = function makeBrowser(c) {   // c: { root(), rescan(), log() }
     for (let i = 2; fs.existsSync(dest) || fs.existsSync(dest + '.part') || claimed.has(dest.toLowerCase()); i++) dest = path.join(dir, raw.replace(/(\.[^.]+)?$/, ' (' + i + ')$1'));
     claimed.add(dest.toLowerCase()); recent.push(now); active++;
     item.setSavePath(dest + '.part');   // set at once, so no "Save as" window opens; the name is put right when the file has arrived whole
+    const facts = pageFacts().catch(() => null);   // the page as it is now, before the owner moves on
     const short = raw.length > 60 ? raw.slice(0, 57) + '…' : raw;
     tell('pb-note', { text: 'Downloading “' + short + '” …' });
     item.on('updated', () => {
@@ -151,7 +187,8 @@ module.exports = function makeBrowser(c) {   // c: { root(), rescan(), log() }
       catch (err) { try { fs.rmSync(dest + '.part', { force: true }); } catch {} log('a download could not be put in place:', err.message); tell('pb-note', { bad: true, text: 'Could not save “' + short + '”: ' + err.message }); return; }
       const got = path.basename(dest);
       tell('pb-note', { good: true, text: 'Saved “' + (got.length > 60 ? got.slice(0, 57) + '…' : got) + '” into “' + where + '” in your library.' });
-      try { c.rescan(); } catch {}
+      dlList.unshift({ name: got, where, p: path.relative(root, dest).split(path.sep).join('/') }); if (dlList.length > 100) dlList.pop(); sendSession();
+      facts.then(info => { try { if (info && c.source) c.source(dest, { ...info, n: raw }); } catch {} }).finally(() => { try { c.rescan(); } catch {} setTimeout(checkHave, 2500); });
     });
   }
 
@@ -190,7 +227,7 @@ module.exports = function makeBrowser(c) {   // c: { root(), rescan(), log() }
     home = false; place(); view.webContents.loadURL(u).catch(() => {}); state();
   }
   // Back to the start page: the page left behind is unloaded, not just hidden, and its pop-ups go with it.
-  function goHome() { home = true; place(); const wc = view.webContents; wc.stop(); wc.loadURL('about:blank').catch(() => {}); for (const w of popups) { try { w.close(); } catch {} } state(); }
+  function goHome() { home = true; checkHave(); place(); const wc = view.webContents; wc.stop(); wc.loadURL('about:blank').catch(() => {}); for (const w of popups) { try { w.close(); } catch {} } state(); }
   function backUrl() { try { const h = view.webContents.navigationHistory, i = h.getActiveIndex(); return i > 0 ? h.getEntryAtIndex(i - 1).url : ''; } catch { return ''; } }
 
   function wire() {
@@ -206,7 +243,9 @@ module.exports = function makeBrowser(c) {   // c: { root(), rescan(), log() }
       else if (m.a === 'reload') { if (!home) wc.reload(); }
       else if (m.a === 'stop') wc.stop();
       else if (m.a === 'outside') { const u = wc.getURL(); if (!home && /^https?:/i.test(u)) shell.openExternal(u); }
-      else if (m.a === 'sites') sendSites();
+      else if (m.a === 'sites') { sendSites(); sendSession(); }
+      else if (m.a === 'showhave') { if (have[0] && c.show) c.show(have[0].p); }
+      else if (m.a === 'showdl') { const d = dlList[m.i | 0]; if (d && c.show) c.show(d.p); }
       else if (m.a === 'save') {   // the page being shown, or taken off the list again if it is already on it
         const u = home ? '' : cleanUrl(wc.getURL()); if (!u) return;
         let list = readSites();
@@ -223,8 +262,8 @@ module.exports = function makeBrowser(c) {   // c: { root(), rescan(), log() }
     });
   }
 
-  function open() {
-    if (win && !win.isDestroyed()) { win.show(); win.focus(); return; }
+  function open(url) {
+    if (win && !win.isDestroyed()) { win.show(); win.focus(); if (url) go(url); return; }
     if (!ses) setUpSession();
     wire();
     win = new BrowserWindow({ width: 1280, height: 860, minWidth: 640, minHeight: 420, title: 'Find models online', icon: path.join(__dirname, 'icon.png'), autoHideMenuBar: true, show: false,
@@ -237,15 +276,15 @@ module.exports = function makeBrowser(c) {   // c: { root(), rescan(), log() }
     win.contentView.addChildView(view);
     const wc = view.webContents;
     guard(wc, false);
-    wc.on('did-navigate', () => state());
-    wc.on('did-navigate-in-page', () => state());
+    wc.on('did-navigate', () => { state(); checkHave(); });
+    wc.on('did-navigate-in-page', () => { state(); checkHave(); });
     wc.on('page-title-updated', () => state());
     wc.on('did-start-loading', () => state());
     wc.on('did-stop-loading', () => state());
     wc.on('did-fail-load', (e, code, desc, url, isMain) => { if (isMain && code !== -3 && !home) tell('pb-note', { bad: true, text: 'The page could not be opened (' + desc + ').' }); state(); });
     home = true;
     win.on('resize', place);
-    win.once('ready-to-show', () => { place(); win.show(); state(); sendSites(); });
+    win.once('ready-to-show', () => { place(); win.show(); state(); sendSites(); if (url) go(url); });
     win.on('closed', () => { for (const w of popups) { try { w.close(); } catch {} } try { if (view && !view.webContents.isDestroyed()) view.webContents.close(); } catch {} win = null; view = null; });
   }
   return { open, close: () => { if (win && !win.isDestroyed()) win.close(); } };
