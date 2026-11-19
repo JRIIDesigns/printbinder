@@ -11,7 +11,7 @@
     "start": "electron .",
     "notices": "node scripts/make-notices.js",
     "art": "electron scripts/make-installer-art.js",
-    "dist": "node scripts/make-notices.js && electron-builder --win nsis --config build/builder.js && node scripts/release-files.js",
+    "dist": "node scripts/make-notices.js && electron-builder --win nsis --config build/builder.js --publish never && node scripts/release-files.js",
     "dist:test": "node scripts/make-notices.js && electron-builder --win nsis --config build/test-variant.js --publish never"
   },
   "dependencies": {
