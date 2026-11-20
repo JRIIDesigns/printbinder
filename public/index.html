@@ -3038,6 +3038,11 @@ PG.shortcuts = SHORTCUTS;
 // build being made now: it is shown under the number the program reports, as long as that is newer than every numbered entry.
 // When a release is cut, give it its number and start a new '' entry for the next one.
 const WHATSNEW = [
+  { v: '2.2.3', title: 'One search, every site', items: [
+    'In <b>Find models</b>, type what you are after once and each site gets a tab with its own results: Printables, MakerWorld, Creality Cloud and Thingiverse. A tab is loaded when you first look at it. You do not need to be signed in to search.',
+    'If your own library already has models that match, the tab row says how many, and takes you to them in the gallery.',
+    'A site you saved can have a tab too: press <b>Add to searches</b> on it and paste the address of a search on that site.',
+  ] },
   { v: '2.2.2', title: 'Downloads remember where they came from', items: [
     'A model downloaded in Find models now remembers the page it came from. Open it and <b>Source</b> takes you back to that page.',
     'What the page says the model is (its title, designer, description and tags) fills in whatever the file does not say itself. That is every STL, and any 3MF that came without a listing inside it. What a file says about itself is never replaced.',
@@ -3172,6 +3177,7 @@ const GUIDE = [
     <p>What is sent, and only when you press a button or send a message: preview pictures, file and folder names, descriptions, and facts read from the files. Model files are never sent. <button class="linkb" data-help="privacy">Privacy in full</button></p>`],
   ['slicers', 'Slicers', () => `<p>On the computer, <b>Send to slicer</b> opens a model in your slicer. The first time, the program lists the slicers it finds installed; choose which to keep and which is the default${REMOTE ? '' : ' (<button class="linkb" data-help="do-slicers">Slicers…</button>)'}. With more than one, the small arrow beside the button picks another. A phone cannot start a slicer.</p>`],
   ['find', 'Find models online', () => `<p>On the computer, <b>Find models</b> in the top bar (or File > Find models online, Ctrl+B) opens a second window for model sites. Its start page has Printables, MakerWorld, Creality Cloud and Thingiverse. Any other site works too: type its address in the bar, and <b>Save site</b> keeps the page you are on for next time.</p>
+    <p><b>Search them all at once.</b> Type what you are after in the box on the start page. Each site gets a tab showing its own results for those words, loaded when you first look at it, and the tab row tells you if your own library already has models that match. To give a saved site a tab as well, press <b>Add to searches</b> on it, search that site for the word <i>printbinder</i>, and paste the address of the results page.</p>
     <p>Sign in to a site there if you want to, and press its download button. A 3D file, a zip, a picture or a sheet of instructions is saved into the unsorted folder of your library (a folder called <code>Unsorted</code>, made for you if you have none), and Review suggests where it belongs. Nothing that is downloaded is opened or run, and any other kind of file is refused: use <b>Open in my browser</b> for those.</p>
     <p>Each download remembers the page it came from. Open the model and <b>Source</b> takes you back there. What the page says the model is (title, designer, description, tags) fills in what the file does not say itself, which is everything for an STL, and it goes along to files you take out of a downloaded zip. It also stays when you save the model again from your slicer under its own name, and a slicer project made from a downloaded file, or saved beside it under the same name, is given that file’s page (marked “from the file this was made from”, since that is matched by name).</p>
     <p>The licence the page states is noted too and shown as <b>Licence</b> on the model. When you open a page whose model you already have, the bar says <b>In your library already</b>; press it to see the file. The start page lists what you have downloaded since the program was started.</p>
@@ -3610,6 +3616,9 @@ document.addEventListener('keydown', e => {
 });
 document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - S.scannedAt > 30000) rescan(); });
 window.rescanNow = () => { S.sig = ''; return rescan(); };
+// the Find models window asking how many files a search of its own would find here, and for that search to be shown
+window.countMatches = q => { const toks = String(q).toLowerCase().split(/\s+/).filter(Boolean); return toks.length ? S.files.filter(f => toks.every(t => f.lc.includes(t))).length : 0; };
+window.searchLibrary = q => { S.folder = ''; setSearch(String(q).slice(0, 120)); };
 // the Find models window asking for one file to be shown here: its folder, and the file opened
 window.showInGallery = async p => { if (!S.byPath.get(p)) { S.sig = ''; await rescan(); } if (!S.byPath.get(p)) return false; S.pick = null; S.q = ''; $('#q').value = ''; S.folder = dirOf(p); setView('gallery'); render(); previewFile(p); return true; };
 tellDesk();

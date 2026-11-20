@@ -12,6 +12,8 @@ const NAME = brand.name;
 // File > Find models online: a second window for model sites, walled off from everything else here (browser.js).
 const findModels = require('./browser.js')({ root: () => menuRoot, source: (abs, info) => { try { return !!(srv && srv.noteSource && srv.noteSource(abs, info)); } catch { return false; } },
   have: url => { try { return (srv && srv.sourcesAt && srv.sourcesAt(url)) || []; } catch { return []; } },   // files already in the library that came from this page
+  count: words => (win ? win.webContents.executeJavaScript('window.countMatches ? countMatches(' + JSON.stringify(String(words)) + ') : -1').catch(() => -1) : Promise.resolve(-1)),   // how many files in the gallery the same words find
+  searchLibrary: words => { try { if (!win) return; if (win.isMinimized()) win.restore(); win.show(); win.focus(); win.webContents.executeJavaScript('window.searchLibrary && searchLibrary(' + JSON.stringify(String(words)) + ')').catch(() => {}); } catch {} },
   show: p => { try { if (!win) return; if (win.isMinimized()) win.restore(); win.show(); win.focus(); win.webContents.executeJavaScript('window.showInGallery && showInGallery(' + JSON.stringify(String(p)) + ')').catch(() => {}); } catch {} }, log: (...a) => { try { if (srv && srv.log) srv.log(...a); } catch {} }, rescan: () => { if (win) win.webContents.executeJavaScript('window.rescanNow && rescanNow()').catch(() => {}); } });
 // The developer tools and Reload are for finding faults, not for everyday use, so the released program neither shows them in
 // the View menu nor lets the window open them. Starting the program with --devtools brings both back for that run.

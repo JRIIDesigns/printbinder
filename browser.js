@@ -17,7 +17,9 @@ const { BrowserWindow, WebContentsView, session, ipcMain, shell, app } = require
 const path = require('path');
 const fs = require('fs');
 
-const TOOL_H = 88;   // the height of the bar at the top (browser.html)
+const TOOL_H = 88, TAB_H = 38;   // the height of the bar at the top, and of the row of tabs under it during a search (browser.html)
+// Where each of the four sites answers a search: %s is where the words go. Each is the site's own results page, shown as it is.
+const SEARCH = [['Printables', 'https://www.printables.com/search/models?q=%s'], ['MakerWorld', 'https://makerworld.com/en/search/models?keyword=%s'], ['Creality Cloud', 'https://www.crealitycloud.com/search?q=%s'], ['Thingiverse', 'https://www.thingiverse.com/search?q=%s&type=things']];
 const PART = 'persist:pb-find-models';
 // what is saved: 3D models and the files that travel with them
 const KEEP = new Set(['stl', '3mf', 'obj', 'step', 'stp', 'iges', 'igs', 'amf', 'ply', 'glb', 'gltf', '3ds', 'dae', 'fbx', 'x3d', 'scad', 'f3d', 'f3z', 'fcstd', 'blend', 'skp', 'sldprt', 'dxf', 'gcode', 'bgcode',
@@ -58,18 +60,30 @@ function allowedSync(url) {
 }
 const hostText = url => { try { return new URL(url).hostname.replace(/^www\./, '') || ''; } catch { return ''; } };
 
-module.exports = function makeBrowser(c) {   // c: { root(), rescan(), log(), source(file, info) }
+module.exports = function makeBrowser(c) {   // c: { root(), rescan(), log(), source(file, info), have(url), show(p), count(words), searchLibrary(words) }
   let win = null, view = null, ses = null, home = true, wired = false;
+  let mainView = null, tabs = [], tabAt = 0, searchQ = '', libCount = -1;   // a search: one tab per site, each loaded when it is first shown; view is always the page on show
   const popups = new Set();
   const log = (...a) => { try { if (c.log) c.log('find models:', ...a); } catch {} };   // faults only: never an address or a page
   const tell = (ch, data) => { try { if (win && !win.isDestroyed()) win.webContents.send(ch, data); } catch {} };
   const hist = () => view.webContents.navigationHistory || { canGoBack: () => view.webContents.canGoBack(), canGoForward: () => view.webContents.canGoForward(), goBack: () => view.webContents.goBack(), goForward: () => view.webContents.goForward() };
-  const place = () => { if (!win || !view) return; const [w, h] = win.getContentSize(); view.setBounds({ x: 0, y: TOOL_H, width: w, height: Math.max(0, h - TOOL_H) }); view.setVisible(!home); };
+  const place = () => { if (!win || !view) return; const [w, h] = win.getContentSize(), top = TOOL_H + (tabs.length ? TAB_H : 0);
+    for (const v of [mainView, ...tabs.map(t => t.view)]) if (v && v !== view) v.setVisible(false);
+    view.setBounds({ x: 0, y: top, width: w, height: Math.max(0, h - top) }); view.setVisible(!home); };
 
   // Sites the owner saved, shown on the start page beside the four that come with the program. Kept per computer, in the settings folder.
+  // A saved site's search address: an address on that same site with %s where the words go. The owner pastes the address of a
+  // search for the word "printbinder", and that word is where %s is put. Anything else is refused.
+  function searchAddress(text, siteUrl) {
+    let t = String(text || '').trim().slice(0, 600); if (!t) return '';
+    if (!t.includes('%s')) t = t.replace(/printbinder/i, '%s');
+    if (t.split('%s').length !== 2) return '';
+    try { const u = new URL(t.replace('%s', 'x')), s = new URL(siteUrl); if (!/^https?:$/.test(u.protocol) || !allowedSync(u.href) || hostText(u.href) !== hostText(s.href)) return ''; } catch { return ''; }
+    return t;
+  }
   const sitesFile = () => path.join(app.getPath('userData'), 'browser-sites.json');
   const cleanUrl = url => { try { const u = new URL(url); if (!/^https?:$/.test(u.protocol) || !allowedSync(u.href)) return ''; u.hash = ''; u.username = ''; u.password = ''; return u.href; } catch { return ''; } };
-  const readSites = () => { try { const j = JSON.parse(fs.readFileSync(sitesFile(), 'utf8')); return Array.isArray(j) ? j.filter(x => x && typeof x.url === 'string' && cleanUrl(x.url) === x.url).map(x => ({ url: x.url, name: String(x.name || '').slice(0, 60) })).slice(0, 60) : []; } catch { return []; } };
+  const readSites = () => { try { const j = JSON.parse(fs.readFileSync(sitesFile(), 'utf8')); return Array.isArray(j) ? j.filter(x => x && typeof x.url === 'string' && cleanUrl(x.url) === x.url).map(x => { const q = searchAddress(x.q, x.url); return { url: x.url, name: String(x.name || '').slice(0, 60), ...(q ? { q } : {}) }; }).slice(0, 60) : []; } catch { return []; } };
   const writeSites = list => { try { fs.writeFileSync(sitesFile(), JSON.stringify(list, null, 1)); } catch (e) { log('saved sites could not be written:', e.message); } };
   const sendSites = () => tell('pb-sites', readSites());
   const state = extra => { if (!view) return; const wc = view.webContents; tell('pb-state', { home, saved: !home && readSites().some(x => x.url === cleanUrl(wc.getURL())), url: home ? '' : wc.getURL(), title: home ? '' : wc.getTitle(), loading: !home && wc.isLoading(), back: !home, fwd: !home && hist().canGoForward(), ...extra }); };
@@ -219,6 +233,43 @@ module.exports = function makeBrowser(c) {   // c: { root(), rescan(), log(), so
     });
   }
 
+  function makeView() {
+    const v = new WebContentsView({ webPreferences: { session: ses, sandbox: true, contextIsolation: true, nodeIntegration: false, webSecurity: true, devTools: false, webviewTag: false } });
+    win.contentView.addChildView(v); v.setVisible(false);
+    const wc = v.webContents, shown = f => () => { if (v === view) f(); };   // a tab in the background does not speak for the window
+    guard(wc, false);
+    wc.on('did-navigate', shown(() => { state(); checkHave(); }));
+    wc.on('did-navigate-in-page', shown(() => { state(); checkHave(); }));
+    wc.on('page-title-updated', shown(() => state()));
+    wc.on('did-start-loading', shown(() => state()));
+    wc.on('did-stop-loading', shown(() => state()));
+    wc.on('did-fail-load', (e, code, desc, url, isMain) => { if (v !== view) return; if (isMain && code !== -3 && !home) tell('pb-note', { bad: true, text: 'The page could not be opened (' + desc + ').' }); state(); });
+    return v;
+  }
+  const dropView = v => { try { win.contentView.removeChildView(v); } catch {} try { if (!v.webContents.isDestroyed()) v.webContents.close(); } catch {} };
+  const sendTabs = () => tell('pb-tabs', { q: searchQ, at: tabAt, lib: libCount, tabs: tabs.map(t => t.name) });
+  // One search, a tab for each site: the four that come with the program, and any saved site that was given a search address.
+  // Each tab is that site's own results page, and is only loaded when it is first looked at.
+  function search(words) {
+    const q = String(words || '').replace(/\s+/g, ' ').trim().slice(0, 120); if (!q) return;
+    endSearch();
+    const list = [...SEARCH, ...readSites().filter(s => s.q).map(s => [s.name || hostText(s.url), s.q])].slice(0, 12);
+    tabs = list.map(([name, tpl]) => ({ name: String(name).slice(0, 40), url: tpl.replace('%s', encodeURIComponent(q)), view: null })).filter(t => allowedSync(t.url));
+    if (!tabs.length) return;
+    searchQ = q; libCount = -1; home = false; showTab(0);
+    if (c.count) Promise.resolve(c.count(q)).then(n => { if (searchQ === q) { libCount = Number.isFinite(+n) ? +n : -1; sendTabs(); } }).catch(() => {});
+  }
+  function showTab(i) {
+    const t = tabs[i]; if (!t) return;
+    if (!t.view) { t.view = makeView(); t.view.webContents.loadURL(t.url).catch(() => {}); }
+    tabAt = i; view = t.view; home = false; place(); sendTabs(); state(); checkHave();
+  }
+  function endSearch() {
+    if (!tabs.length) return;
+    for (const t of tabs) if (t.view) dropView(t.view);
+    tabs = []; tabAt = 0; searchQ = ''; libCount = -1; view = mainView; sendTabs();
+  }
+
   function go(url) {
     let u = String(url || '').trim(); if (!u) return;
     if (!/^[a-z][a-z0-9+.-]*:/i.test(u)) u = /^[^\s/]+\.[^\s/]+(\/.*)?$/.test(u) ? 'https://' + u : 'https://duckduckgo.com/?q=' + encodeURIComponent(u);
@@ -227,7 +278,7 @@ module.exports = function makeBrowser(c) {   // c: { root(), rescan(), log(), so
     home = false; place(); view.webContents.loadURL(u).catch(() => {}); state();
   }
   // Back to the start page: the page left behind is unloaded, not just hidden, and its pop-ups go with it.
-  function goHome() { home = true; checkHave(); place(); const wc = view.webContents; wc.stop(); wc.loadURL('about:blank').catch(() => {}); for (const w of popups) { try { w.close(); } catch {} } state(); }
+  function goHome() { endSearch(); home = true; checkHave(); place(); const wc = view.webContents; wc.stop(); wc.loadURL('about:blank').catch(() => {}); for (const w of popups) { try { w.close(); } catch {} } state(); }
   function backUrl() { try { const h = view.webContents.navigationHistory, i = h.getActiveIndex(); return i > 0 ? h.getEntryAtIndex(i - 1).url : ''; } catch { return ''; } }
 
   function wire() {
@@ -238,12 +289,22 @@ module.exports = function makeBrowser(c) {   // c: { root(), rescan(), log(), so
       const wc = view.webContents, h = hist();
       if (m.a === 'go') go(m.url);
       else if (m.a === 'home') goHome();
-      else if (m.a === 'back') { const b = backUrl(); if (!home && h.canGoBack() && b && b !== 'about:blank') h.goBack(); else goHome(); state(); }
+      else if (m.a === 'back') { const b = backUrl(); if (!home && h.canGoBack() && b && b !== 'about:blank') h.goBack(); else if (!tabs.length) goHome(); state(); }   // in a search, the first page of a tab is as far back as it goes
+      else if (m.a === 'search') search(m.url);
+      else if (m.a === 'tab') showTab(m.i | 0);
+      else if (m.a === 'libshow') { if (searchQ && c.searchLibrary) c.searchLibrary(searchQ); }
+      else if (m.a === 'setq') {   // give a saved site a search address, or take it away
+        const u = cleanUrl(m.url), list = readSites(), s = list.find(x => x.url === u); if (!s) return;
+        const q = searchAddress(m.q, u);
+        if (String(m.q || '').trim() && !q) { tell('pb-note', { bad: true, text: 'That is not a search address on that site. Search the site for the word printbinder and paste the address of the results.' }); return; }
+        if (q) s.q = q; else delete s.q;
+        writeSites(list); sendSites(); tell('pb-note', { good: true, text: q ? 'Saved. “' + (s.name || hostText(u)) + '” gets a tab in your searches now.' : 'Taken out of your searches.' });
+      }
       else if (m.a === 'fwd') { if (!home && h.canGoForward()) h.goForward(); }
       else if (m.a === 'reload') { if (!home) wc.reload(); }
       else if (m.a === 'stop') wc.stop();
       else if (m.a === 'outside') { const u = wc.getURL(); if (!home && /^https?:/i.test(u)) shell.openExternal(u); }
-      else if (m.a === 'sites') { sendSites(); sendSession(); }
+      else if (m.a === 'sites') { sendSites(); sendSession(); sendTabs(); }
       else if (m.a === 'showhave') { if (have[0] && c.show) c.show(have[0].p); }
       else if (m.a === 'showdl') { const d = dlList[m.i | 0]; if (d && c.show) c.show(d.p); }
       else if (m.a === 'save') {   // the page being shown, or taken off the list again if it is already on it
@@ -272,20 +333,12 @@ module.exports = function makeBrowser(c) {   // c: { root(), rescan(), log(), so
     win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     win.webContents.on('will-navigate', e => e.preventDefault());   // the bar never goes anywhere itself
     win.loadFile(path.join(__dirname, 'browser.html'));
-    view = new WebContentsView({ webPreferences: { session: ses, sandbox: true, contextIsolation: true, nodeIntegration: false, webSecurity: true, devTools: false, webviewTag: false } });
-    win.contentView.addChildView(view);
-    const wc = view.webContents;
-    guard(wc, false);
-    wc.on('did-navigate', () => { state(); checkHave(); });
-    wc.on('did-navigate-in-page', () => { state(); checkHave(); });
-    wc.on('page-title-updated', () => state());
-    wc.on('did-start-loading', () => state());
-    wc.on('did-stop-loading', () => state());
-    wc.on('did-fail-load', (e, code, desc, url, isMain) => { if (isMain && code !== -3 && !home) tell('pb-note', { bad: true, text: 'The page could not be opened (' + desc + ').' }); state(); });
+    tabs = []; tabAt = 0; searchQ = ''; libCount = -1;
+    mainView = view = makeView();
     home = true;
     win.on('resize', place);
-    win.once('ready-to-show', () => { place(); win.show(); state(); sendSites(); if (url) go(url); });
-    win.on('closed', () => { for (const w of popups) { try { w.close(); } catch {} } try { if (view && !view.webContents.isDestroyed()) view.webContents.close(); } catch {} win = null; view = null; });
+    win.once('ready-to-show', () => { place(); win.show(); state(); sendSites(); sendTabs(); if (url) go(url); });
+    win.on('closed', () => { for (const w of popups) { try { w.close(); } catch {} } for (const v of [mainView, ...tabs.map(t => t.view)]) { try { if (v && !v.webContents.isDestroyed()) v.webContents.close(); } catch {} } win = null; view = null; mainView = null; tabs = []; searchQ = ''; });
   }
   return { open, close: () => { if (win && !win.isDestroyed()) win.close(); } };
 };

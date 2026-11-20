@@ -36,6 +36,22 @@ button.ic{width:34px;padding:5px 0;font-size:15px}
 #have{color:var(--good);font-weight:600;max-width:38%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap} #have[hidden],#dls[hidden]{display:none}
 #dl{display:none;max-width:60rem;margin:0 0 22px} #dl .row{display:flex;gap:10px;align-items:center;padding:8px 12px;background:var(--panel);border:1px solid var(--line);border-radius:8px;margin-bottom:6px}
 #dl .row b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap} #dl .row span{color:var(--dim);font-size:12.5px;white-space:nowrap}
+body.searching #bar{height:126px}
+#tabs{display:none;gap:4px;align-items:flex-end;height:38px;margin:0 -10px;padding:0 10px;border-top:1px solid var(--line);overflow:hidden}
+body.searching #tabs{display:flex}
+#tabs .tab{border:1px solid transparent;border-bottom:0;border-radius:8px 8px 0 0;padding:6px 14px;color:var(--dim);font-weight:600;height:32px}
+#tabs .tab:hover{color:var(--text)} #tabs .tab.on{background:var(--bg);border-color:var(--line);color:var(--text);box-shadow:inset 0 3px 0 var(--green)}
+#tabs .sp{flex:1} #tabs .for{color:var(--dim);font-size:12.5px;align-self:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:26%}
+#tabs #lib{align-self:center;border:0;padding:2px 6px;color:var(--good);font-weight:600;font-size:12.5px} #tabs #lib[hidden]{display:none}
+#tabs #endq{align-self:center;border:0;padding:2px 6px;color:var(--dim);font-size:12.5px;text-decoration:underline}
+#sf{display:flex;gap:8px;max-width:46rem;margin:16px 0 4px}
+#sq{flex:1;font:inherit;font-size:16px;color:inherit;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:11px 14px}
+#sq:focus{outline:2px solid var(--greend);outline-offset:-1px}
+#sf button{background:var(--green);color:#0e2233;font-weight:700;border-color:var(--green);border-radius:10px;padding:0 20px}
+#sfhint{color:var(--dim);font-size:12.5px;max-width:46rem;margin:0 0 6px}
+#sites2 .qs{position:absolute;right:8px;bottom:6px;border:0;padding:1px 4px;font-size:12px;color:var(--dim);text-decoration:underline} #sites2 .qs.on{color:var(--good);text-decoration:none;font-weight:600}
+#qedit{display:none;max-width:60rem;margin:-10px 0 22px;padding:14px 16px;background:var(--panel);border:1px solid var(--greend);border-radius:10px}
+#qedit p{max-width:none;margin:0 0 8px} #qedit .r{display:flex;gap:8px} #qedit input{flex:1;font:inherit;color:inherit;background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:6px 10px}
 </style>
 </head>
 <body>
@@ -55,10 +71,13 @@ button.ic{width:34px;padding:5px 0;font-size:15px}
     <button id="dls" hidden title="What you have downloaded since PrintBinder was started"></button>
     <button id="clear" title="Forget the sign-ins, cookies and saved pages of this window">Clear sign-ins</button>
   </div>
+  <div id="tabs"></div>
 </div>
 <div id="home">
   <h1>Find models online</h1>
   <p>Pick a site. Sign in there if you want to, find a model, and press its download button. The file lands in the <b>unsorted</b> folder of your library, and Review suggests where it belongs.</p>
+  <form id="sf"><input id="sq" type="text" spellcheck="false" autocomplete="off" maxlength="120" placeholder="Search all of them at once: dragon, phone stand, cable clip…" aria-label="Search all the sites at once"><button type="submit">Search</button></form>
+  <p id="sfhint">One search opens a tab for each site, showing that site’s own results. You do not need to be signed in to search.</p>
   <div id="sites">
     <button data-u="https://www.printables.com/"><b>Printables</b><span>printables.com</span></button>
     <button data-u="https://makerworld.com/"><b>MakerWorld</b><span>makerworld.com</span></button>
@@ -67,7 +86,9 @@ button.ic{width:34px;padding:5px 0;font-size:15px}
   </div>
   <div id="dl"><h2>Downloaded since PrintBinder was started</h2><div id="dllist"></div></div>
   <div id="mine"><h2>Your saved sites</h2><div id="sites2"></div></div>
+  <div id="qedit"><p><b id="qname"></b>: to give this site a tab in your searches, search it for the word <b>printbinder</b>, copy the address of the results page, and paste it here.</p><div class="r"><input id="qin" type="text" spellcheck="false" autocomplete="off" placeholder="https://…search…printbinder"><button id="qsave">Save</button><button id="qdrop">Take out of searches</button><button id="qcancel">Cancel</button></div></div>
   <ul>
+    <li>Search once and each site gets a tab with its own results. A site you saved can have a tab too: press <b>Add to searches</b> on it.</li>
     <li>Any site works: type its address in the bar at the top. <b>&#9734; Save site</b> keeps the page you are on here for next time.</li>
     <li>These pages are kept apart from the rest of PrintBinder: they cannot see your library, your files or your AI keys.</li>
     <li>Sign-ins made here are remembered for this window only. <b>Clear sign-ins</b> forgets them.</li>
@@ -93,6 +114,21 @@ B.onState(s => {
   $('#reload').innerHTML = s.loading ? '&#10005;' : '&#8635;'; if (s.loading) $('#reload').dataset.stop = '1'; else delete $('#reload').dataset.stop;
   document.title = (s.title ? s.title + ' — ' : '') + 'Find models online';
 });
+let QS = null;
+$('#qsave').addEventListener('click', () => { if (QS) B.nav('setq', QS.url, $('#qin').value); $('#qedit').style.display = 'none'; });
+$('#qdrop').addEventListener('click', () => { if (QS) B.nav('setq', QS.url, ''); $('#qedit').style.display = 'none'; });
+$('#qcancel').addEventListener('click', () => { $('#qedit').style.display = 'none'; });
+$('#qin').addEventListener('keydown', e => { if (e.key === 'Enter') $('#qsave').click(); else if (e.key === 'Escape') $('#qcancel').click(); });
+$('#sf').addEventListener('submit', e => { e.preventDefault(); const q = $('#sq').value.trim(); if (q) B.nav('search', q); });
+B.onTabs(t => {
+  const on = t.tabs.length > 0, box = $('#tabs'); document.body.classList.toggle('searching', on); box.textContent = '';
+  if (!on) return;
+  t.tabs.forEach((name, i) => { const b = document.createElement('button'); b.className = 'tab' + (i === t.at ? ' on' : ''); b.textContent = name; b.addEventListener('click', () => B.nav('tab', i)); box.append(b); });
+  const sp = document.createElement('span'); sp.className = 'sp'; const f = document.createElement('span'); f.className = 'for'; f.textContent = 'Searching for “' + t.q + '”';
+  const lib = document.createElement('button'); lib.id = 'lib'; lib.hidden = !(t.lib > 0); lib.textContent = t.lib > 0 ? 'In your library: ' + t.lib + ' that match' + (t.lib === 1 ? 'es' : '') : ''; lib.title = 'Show them in the gallery'; lib.addEventListener('click', () => B.nav('libshow'));
+  const end = document.createElement('button'); end.id = 'endq'; end.textContent = 'End search'; end.addEventListener('click', () => B.nav('home'));
+  box.append(sp, f, lib, end); $('#sq').value = t.q;
+});
 B.onSites(list => {
   const box = $('#sites2'); box.textContent = ''; $('#mine').style.display = list.length ? 'block' : 'none';
   for (const s of list) {
@@ -101,7 +137,9 @@ B.onSites(list => {
     const x = document.createElement('button'); x.className = 'x'; x.title = 'Take off the list'; x.innerHTML = '&times;';
     x.addEventListener('click', e => { e.stopPropagation(); B.nav('unsave', s.url); });
     d.addEventListener('click', () => B.nav('go', s.url)); d.addEventListener('keydown', e => { if (e.key === 'Enter') B.nav('go', s.url); });
-    d.append(b, sp, x); box.append(d);
+    const qs = document.createElement('button'); qs.className = 'qs' + (s.q ? ' on' : ''); qs.textContent = s.q ? 'In your searches' : 'Add to searches'; qs.title = 'Give this site a tab when you search all the sites';
+    qs.addEventListener('click', e => { e.stopPropagation(); QS = s; $('#qname').textContent = s.name || s.url; $('#qin').value = s.q || ''; $('#qdrop').style.display = s.q ? '' : 'none'; $('#qedit').style.display = 'block'; $('#qin').focus(); });
+    d.append(b, sp, x, qs); box.append(d);
   }
 });
 B.nav('sites');
